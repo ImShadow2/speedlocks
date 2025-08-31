@@ -1,7 +1,11 @@
+speedlock
+
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ImShadow2/speedlocks/main/speed.lua"))()
 
-speedlock
+tp location
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ImShadow2/speedlocks/main/tp.lua"))()
 
-tp location
+fling gui
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ImShadow2/speedlocks/main/fling.lua"))()
