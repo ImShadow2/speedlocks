@@ -9,3 +9,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ImShadow2/speedlocks/
 fling gui
 
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ImShadow2/speedlocks/main/fling.lua"))()
+
+
+-- I DONT OWN THIS SCRIPT
+loadstring(game:HttpGet(('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'),true))()
