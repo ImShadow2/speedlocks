@@ -1,0 +1,22 @@
+-- SETTINGS
+_G.HeadSize = 15          -- how big you want the hitbox (15, 20, etc.)
+_G.Disabled = true        -- turn on/off (true = enabled)
+
+-- MAIN LOOP
+game:GetService("RunService").RenderStepped:Connect(function()
+    if _G.Disabled then
+        for _, v in next, game:GetService("Players"):GetPlayers() do
+            if v.Name ~= game:GetService("Players").LocalPlayer.Name then
+                pcall(function()
+                    -- resize their HumanoidRootPart
+                    local root = v.Character.HumanoidRootPart
+                    root.Size = Vector3.new(_G.HeadSize, _G.HeadSize, _G.HeadSize)
+                    root.Transparency = 0.7
+                    root.BrickColor = BrickColor.new("Really blue")
+                    root.Material = Enum.Material.Neon
+                    root.CanCollide = false
+                end)
+            end
+        end
+    end
+end)
