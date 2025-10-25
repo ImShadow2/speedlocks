@@ -202,18 +202,20 @@ btnTerminate.MouseButton1Click:Connect(function()
 end)
 
 -- Close / Minimize
-closeBtn.MouseButton1Click:Connect(Cleanup)
-
+-- Minimize / Restore with remembered size
 local minimized = false
+local originalSize = main.Size
+
 minimizeBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     body.Visible = not minimized
     if minimized then
         main.Size = UDim2.new(0, 240, 0, 56)
     else
-        main.Size = UDim2.new(0, 380, 0, 240)
+        main.Size = originalSize
     end
 end)
+
 
 -- Dragging
 local dragging,dragInput,dragStart,startPos
