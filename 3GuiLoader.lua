@@ -1,9 +1,10 @@
---// 🧩 Modern GUI Loader (Auto Button Version)
+--// 🧩 Modern GUI Loader (Auto Button Version + Auto Resize + Scroll)
 --// Features:
 --// • Draggable, modern GUI
 --// • RightShift toggle visibility
 --// • Re-exec safe cleanup
 --// • Auto button generation from table
+--// • Auto vertical resize with scrolling
 --// • Smooth minimize + close
 
 -- 🛑 Prevent stacking on re-execution
@@ -21,7 +22,7 @@ local LocalPlayer = Players.LocalPlayer
 
 --// Config
 local TOGGLE_KEY = Enum.KeyCode.RightShift
-local GUI_NAME = "ModernGuiLoader_v3"
+local GUI_NAME = "ModernGuiLoader_v4"
 
 --// Utility: Instance creator
 local function new(cls, props)
@@ -37,9 +38,16 @@ local LOADERS = {
     {Name = "Infinite Yield", Description = "Load InfiniteYield admin script", URL = "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"},
     {Name = "Speed", Description = "Load Speed script (if available)", URL = "https://raw.githubusercontent.com/ImShadow2/speedlocks/main/speed.lua"},
     {Name = "Universal", Description = "Load universal GUI script", URL = "https://raw.githubusercontent.com/ImShadow2/3-universal-gui/main/3universalgui.lua"},
-    {Name = "Part Esp", Description = "Load Esp part", URL = "https://raw.githubusercontent.com/ImShadow2/partesp/main/partespplustp.lua"}
-    -- {Name = "Fly", Description = "Toggle fly script", URL = "https://example.com/fly.lua"},
+    {Name = "Part Esp", Description = "Load Esp part", URL = "https://raw.githubusercontent.com/ImShadow2/partesp/main/partespplustp.lua"},
 }
+
+--// Safe Load Function
+local function safeLoad(url)
+    local ok, res = pcall(function() return game:HttpGet(url, true) end)
+    if not ok or not res then warn("❌ Failed to fetch:", url) return end
+    local suc, err = pcall(function() loadstring(res)() end)
+    if not suc then warn("⚠️ Exec error:", err) end
+end
 
 --// Create GUI
 local screenGui = new("ScreenGui", {
@@ -100,29 +108,6 @@ local minimizeBtn = new("TextButton", {
 })
 new("UICorner", {CornerRadius = UDim.new(0,8), Parent = minimizeBtn})
 
---// Body
-local body = new("Frame", {
-    Size = UDim2.new(1,-32,1,-64),
-    Position = UDim2.new(0,16,0,56),
-    BackgroundTransparency = 1,
-    Parent = main
-})
-local uiGrid = new("UIGridLayout", {
-    Parent = body,
-    CellSize = UDim2.new(0, 170, 0, 56),
-    CellPadding = UDim2.new(0,12,0,12),
-    HorizontalAlignment = Enum.HorizontalAlignment.Left,
-    SortOrder = Enum.SortOrder.LayoutOrder
-})
-
---// Safe Load Function
-local function safeLoad(url)
-    local ok, res = pcall(function() return game:HttpGet(url, true) end)
-    if not ok or not res then warn("❌ Failed to fetch:", url) return end
-    local suc, err = pcall(function() loadstring(res)() end)
-    if not suc then warn("⚠️ Exec error:", err) end
-end
-
 --// Button Maker
 local function makeButton(text, desc, parent)
     local btn = new("TextButton", {
@@ -159,18 +144,47 @@ local function Cleanup()
 end
 closeBtn.MouseButton1Click:Connect(Cleanup)
 
+--// Body (scrollable + auto height)
+local scrollingFrame = new("ScrollingFrame", {
+    Size = UDim2.new(1, -32, 1, -64),
+    Position = UDim2.new(0, 16, 0, 56),
+    BackgroundTransparency = 1,
+    CanvasSize = UDim2.new(0, 0, 0, 0),
+    ScrollBarThickness = 4,
+    Parent = main
+})
+local uiGrid = new("UIGridLayout", {
+    Parent = scrollingFrame,
+    CellSize = UDim2.new(0, 170, 0, 56),
+    CellPadding = UDim2.new(0, 12, 0, 12),
+    HorizontalAlignment = Enum.HorizontalAlignment.Left,
+    SortOrder = Enum.SortOrder.LayoutOrder
+})
+
 --// Auto Create Buttons from LOADERS
 for _, item in ipairs(LOADERS) do
-    local btn = makeButton(item.Name, item.Description, body)
+    local btn = makeButton(item.Name, item.Description, scrollingFrame)
     btn.MouseButton1Click:Connect(function()
         if item.URL then safeLoad(item.URL) else warn("⚠️ Missing URL for", item.Name) end
     end)
 end
 
---// Terminate Button (always last)
-local btnTerminate = makeButton("Terminate","Remove this GUI and cleanup", body)
+--// Terminate Button
+local btnTerminate = makeButton("Terminate", "Remove this GUI and cleanup", scrollingFrame)
 btnTerminate.BackgroundColor3 = Color3.fromRGB(55,40,40)
 btnTerminate.MouseButton1Click:Connect(Cleanup)
+
+--// Auto adjust height & scroll
+task.wait()
+local totalHeight = uiGrid.AbsoluteContentSize.Y + 80
+main.Size = UDim2.new(0, 200, 0, math.clamp(totalHeight, 200, 700))
+scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, uiGrid.AbsoluteContentSize.Y)
+
+uiGrid:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    local h = uiGrid.AbsoluteContentSize.Y + 80
+    main.Size = UDim2.new(0, 200, 0, math.clamp(h, 200, 700))
+    scrollingFrame.CanvasSize = UDim2.new(0, 0, 0, uiGrid.AbsoluteContentSize.Y)
+end)
 
 --// 🌀 Minimize / Restore
 local minimized = false
@@ -186,10 +200,10 @@ end
 minimizeBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     if minimized then
-        body.Visible = false
+        scrollingFrame.Visible = false
         tweenMainTo(UDim2.new(0, 240, 0, 56), originalPosition)
     else
-        body.Visible = true
+        scrollingFrame.Visible = true
         tweenMainTo(originalSize, originalPosition)
     end
 end)
@@ -226,4 +240,4 @@ end)
 --// Store Cleanup reference
 getgenv().ModernGuiLoader = {Cleanup = Cleanup, ScreenGui = screenGui}
 
-print("✅ Modern GUI Loader (Auto Button) loaded. Press RightShift to toggle visibility.")
+print("✅ Modern GUI Loader v4 loaded. Press RightShift to toggle visibility.")
