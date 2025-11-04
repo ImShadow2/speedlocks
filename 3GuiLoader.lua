@@ -37,7 +37,7 @@ local LOADERS = {
     {Name = "Infinite Yield", Description = "Load InfiniteYield admin script", URL = "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"},
     {Name = "Speed", Description = "Load Speed script (if available)", URL = "https://raw.githubusercontent.com/ImShadow2/speedlocks/main/speed.lua"},
     {Name = "Universal", Description = "Load universal GUI script", URL = "https://raw.githubusercontent.com/ImShadow2/3-universal-gui/main/3universalgui.lua"},
-    -- 🧩 Add new scripts below:
+    {Name = "Part Esp", Description = "Load Esp part", URL = "https://raw.githubusercontent.com/ImShadow2/partesp/main/partespplustp.lua"}
     -- {Name = "Fly", Description = "Toggle fly script", URL = "https://example.com/fly.lua"},
 }
 
