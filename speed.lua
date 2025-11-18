@@ -55,17 +55,6 @@ end
 -- Run cleanup now if script is re-executed
 _G.SpeedLockCleanup()
 
-
-for _, gui in ipairs(game.CoreGui:GetChildren()) do
-    if gui.Name == "SpeedLockGUI" then gui:Destroy() end
-end
-if _G.SpeedLockConnections then
-    for _, c in ipairs(_G.SpeedLockConnections) do
-        pcall(function() c:Disconnect() end)
-    end
-end
-_G.SpeedLockConnections = {}
-
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local player = game.Players.LocalPlayer
