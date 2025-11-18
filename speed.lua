@@ -1,6 +1,61 @@
 -- Dynamic Speed Lock GUI | Infinite Jump, Noclip, Teleport Tool, Fly
 
 -- Cleanup on re-execution
+-- FULL CLEANUP ON RE-EXECUTION
+if _G.SpeedLockCleanup then
+    _G.SpeedLockCleanup()
+end
+
+_G.SpeedLockCleanup = function()
+    -- Remove GUI
+    for _, gui in ipairs(game.CoreGui:GetChildren()) do
+        if gui.Name == "SpeedLockGUI" then
+            gui:Destroy()
+        end
+    end
+
+    -- Disconnect old connections
+    if _G.SpeedLockConnections then
+        for _, c in ipairs(_G.SpeedLockConnections) do
+            pcall(function() c:Disconnect() end)
+        end
+    end
+    _G.SpeedLockConnections = {}
+
+    -- Reset speed
+    local plr = game.Players.LocalPlayer
+    if plr.Character and plr.Character:FindFirstChild("Humanoid") then
+        plr.Character.Humanoid.WalkSpeed = 16
+        plr.Character.Humanoid.JumpPower = 50
+    end
+
+    -- Remove noclip
+    if plr.Character then
+        for _, part in ipairs(plr.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+
+    -- Remove fly forces
+    if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = plr.Character.HumanoidRootPart
+        if hrp:FindFirstChild("BodyVelocity") then hrp.BodyVelocity:Destroy() end
+        if hrp:FindFirstChild("BodyGyro") then hrp.BodyGyro:Destroy() end
+    end
+
+    -- Reset globals
+    _G.SpeedLockFlying = false
+    _G.SpeedLockNoclip = false
+    _G.SpeedLockToggle = false
+    _G.SpeedLockHold = false
+end
+
+-- Run cleanup now if script is re-executed
+_G.SpeedLockCleanup()
+
+
 for _, gui in ipairs(game.CoreGui:GetChildren()) do
     if gui.Name == "SpeedLockGUI" then gui:Destroy() end
 end
