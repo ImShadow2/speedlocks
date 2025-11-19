@@ -39,6 +39,7 @@ local LOADERS = {
     {Name = "Speed", Description = "Load Speed script (if available)", URL = "https://raw.githubusercontent.com/ImShadow2/speedlocks/main/speed.lua"},
     {Name = "Universal", Description = "Load universal GUI script", URL = "https://raw.githubusercontent.com/ImShadow2/3-universal-gui/main/3universalgui.lua"},
     {Name = "Part Esp", Description = "Load Esp part", URL = "https://raw.githubusercontent.com/ImShadow2/partesp/main/partespplustp.lua"},
+    {Name = "Opacity", Description = "Edit Opacity 1-10", URL = "https://raw.githubusercontent.com/ImShadow2/speedlocks/main/opacity.lua"}
 }
 
 --// Safe Load Function
