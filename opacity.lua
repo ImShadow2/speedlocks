@@ -60,7 +60,7 @@ closeButton.MouseButton1Click:Connect(function()
 end)
 
 -- Keybind input
-local keybindBox = Instance.new("TextBox")
+local keybindBox = Instance.new("Type keybind")
 keybindBox.Size = UDim2.new(0, 100, 0, 30)
 keybindBox.Position = UDim2.new(0, 10, 0, 40)
 keybindBox.PlaceholderText = "Press new key"
@@ -79,7 +79,7 @@ local function addRow()
     row.Parent = mainFrame
 
     -- Part name input
-    local partNameInput = Instance.new("TextBox")
+    local partNameInput = Instance.new("Part Name")
     partNameInput.Size = UDim2.new(0.4, -5, 1, 0)
     partNameInput.Position = UDim2.new(0, 5, 0, 0)
     partNameInput.PlaceholderText = "Part Name"
@@ -88,7 +88,7 @@ local function addRow()
     partNameInput.Parent = row
 
     -- Opacity input (0-10, 10=1)
-    local opacityInput = Instance.new("TextBox")
+    local opacityInput = Instance.new("1-10")
     opacityInput.Size = UDim2.new(0.2, -5, 1, 0)
     opacityInput.Position = UDim2.new(0.4, 5, 0, 0)
     opacityInput.PlaceholderText = "0-10"
