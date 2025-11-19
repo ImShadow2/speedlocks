@@ -4,18 +4,16 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "DynamicOpacityGUI"
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Table to keep track of modified parts per row
+-- Table to keep track of modified parts
 local modifiedParts = {}
 
 -- Main frame
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 400, 0, 50) -- will grow dynamically
+mainFrame.Size = UDim2.new(0, 420, 0, 100) -- starting size, grows with rows
 mainFrame.Position = UDim2.new(0, 50, 0, 50)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
-
--- Make the GUI draggable
 mainFrame.Active = true
 mainFrame.Draggable = true
 
@@ -26,10 +24,30 @@ listLayout.FillDirection = Enum.FillDirection.Vertical
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Parent = mainFrame
 
--- + Button
+-- Keybind label
+local keybindLabel = Instance.new("TextLabel")
+keybindLabel.Size = UDim2.new(0, 80, 0, 30)
+keybindLabel.Position = UDim2.new(0, 10, 0, 5)
+keybindLabel.BackgroundColor3 = Color3.fromRGB(50,50,50)
+keybindLabel.TextColor3 = Color3.fromRGB(255,255,255)
+keybindLabel.Text = "Toggle Key:"
+keybindLabel.TextScaled = true
+keybindLabel.Parent = mainFrame
+
+-- Keybind input
+local keybindBox = Instance.new("TextBox")
+keybindBox.Size = UDim2.new(0, 100, 0, 30)
+keybindBox.Position = UDim2.new(0, 100, 0, 5)
+keybindBox.PlaceholderText = "Press key"
+keybindBox.BackgroundColor3 = Color3.fromRGB(70,70,70)
+keybindBox.TextColor3 = Color3.fromRGB(255,255,255)
+keybindBox.ClearTextOnFocus = true
+keybindBox.Parent = mainFrame
+
+-- + Button to add rows
 local addButton = Instance.new("TextButton")
-addButton.Size = UDim2.new(1, -10, 0, 30)
-addButton.Position = UDim2.new(0, 5, 0, 5)
+addButton.Size = UDim2.new(0, 30, 0, 30)
+addButton.Position = UDim2.new(0, 210, 0, 5)
 addButton.Text = "+"
 addButton.BackgroundColor3 = Color3.fromRGB(70,70,70)
 addButton.TextColor3 = Color3.fromRGB(255,255,255)
@@ -44,7 +62,7 @@ closeButton.BackgroundColor3 = Color3.fromRGB(170,0,0)
 closeButton.TextColor3 = Color3.fromRGB(255,255,255)
 closeButton.Parent = mainFrame
 
--- Function to reset all modified parts
+-- Reset all modified parts
 local function resetAllParts()
     for part, _ in pairs(modifiedParts) do
         if part and part.Parent then
@@ -59,16 +77,41 @@ closeButton.MouseButton1Click:Connect(function()
     screenGui:Destroy()
 end)
 
--- Keybind input
-local keybindBox = Instance.new("Type keybind")
-keybindBox.Size = UDim2.new(0, 100, 0, 30)
-keybindBox.Position = UDim2.new(0, 10, 0, 40)
-keybindBox.PlaceholderText = "Press new key"
-keybindBox.BackgroundColor3 = Color3.fromRGB(70,70,70)
-keybindBox.TextColor3 = Color3.fromRGB(255,255,255)
-keybindBox.ClearTextOnFocus = true
-keybindBox.Parent = mainFrame
+-- Keybind system
+local toggleKey = Enum.KeyCode.F5 -- default
 
+-- Toggle GUI visibility
+local function toggleGUI()
+    if screenGui.Enabled == nil then
+        screenGui.Enabled = true
+    else
+        screenGui.Enabled = not screenGui.Enabled
+    end
+end
+
+-- Listen to key presses
+game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.Keyboard then
+        if input.KeyCode == toggleKey then
+            toggleGUI()
+        end
+    end
+end)
+
+-- Change keybind dynamically
+keybindBox.Focused:Connect(function()
+    local connection
+    connection = game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            toggleKey = input.KeyCode
+            keybindBox.Text = "Key: "..tostring(toggleKey):gsub("Enum.KeyCode.", "")
+            connection:Disconnect()
+            keybindBox:ReleaseFocus()
+        end
+    end)
+end)
 
 -- Function to add a new row
 local function addRow()
@@ -78,8 +121,8 @@ local function addRow()
     row.BorderSizePixel = 0
     row.Parent = mainFrame
 
-    -- Part name input
-    local partNameInput = Instance.new("Part Name")
+    -- Part Name TextBox
+    local partNameInput = Instance.new("TextBox")
     partNameInput.Size = UDim2.new(0.4, -5, 1, 0)
     partNameInput.Position = UDim2.new(0, 5, 0, 0)
     partNameInput.PlaceholderText = "Part Name"
@@ -87,8 +130,8 @@ local function addRow()
     partNameInput.TextColor3 = Color3.fromRGB(255,255,255)
     partNameInput.Parent = row
 
-    -- Opacity input (0-10, 10=1)
-    local opacityInput = Instance.new("1-10")
+    -- Opacity TextBox (0-10)
+    local opacityInput = Instance.new("TextBox")
     opacityInput.Size = UDim2.new(0.2, -5, 1, 0)
     opacityInput.Position = UDim2.new(0.4, 5, 0, 0)
     opacityInput.PlaceholderText = "0-10"
@@ -110,11 +153,11 @@ local function addRow()
         local value = tonumber(opacityInput.Text)
         if not value or value < 0 then value = 0 end
         if value > 10 then value = 10 end
-        local transparency = value/10
+        local transparency = value / 10
         for _, part in ipairs(workspace:GetDescendants()) do
             if part:IsA("BasePart") and part.Name:lower() == name:lower() then
                 part.Transparency = transparency
-                modifiedParts[part] = true -- track modified parts
+                modifiedParts[part] = true
             end
         end
     end)
@@ -129,7 +172,6 @@ local function addRow()
     deleteBtn.Parent = row
 
     deleteBtn.MouseButton1Click:Connect(function()
-        -- Reset parts for this row
         local name = partNameInput.Text
         for _, part in ipairs(workspace:GetDescendants()) do
             if part:IsA("BasePart") and part.Name:lower() == name:lower() then
@@ -137,46 +179,9 @@ local function addRow()
                 modifiedParts[part] = nil
             end
         end
-        -- Remove row
         row:Destroy()
     end)
 end
-
--- Keybind system
-local toggleKey = Enum.KeyCode.F5  -- default toggle key
-
--- Function to toggle GUI visibility
-local function toggleGUI()
-    if screenGui.Enabled == nil then
-        screenGui.Enabled = true
-    else
-        screenGui.Enabled = not screenGui.Enabled
-    end
-end
-
--- Listen to key presses
-game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard then
-        if input.KeyCode == toggleKey then
-            toggleGUI()
-        end
-    end
-end)
-
--- Change keybind when TextBox focused
-keybindBox.Focused:Connect(function()
-    local connection
-    connection = game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            toggleKey = input.KeyCode
-            keybindBox.Text = "Key: "..tostring(toggleKey):gsub("Enum.KeyCode.", "")
-            connection:Disconnect()
-            keybindBox:ReleaseFocus()
-        end
-    end)
-end)
 
 -- Connect + button
 addButton.MouseButton1Click:Connect(addRow)
