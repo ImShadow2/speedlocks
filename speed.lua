@@ -7,7 +7,7 @@ if _G.SpeedLockCleanup then
 end
 
 _G.SpeedLockCleanup = function()
-    -- Remove GUI
+    -- Remove GUI only
     for _, gui in ipairs(game.CoreGui:GetChildren()) do
         if gui.Name == "SpeedLockGUI" then
             gui:Destroy()
@@ -20,36 +20,17 @@ _G.SpeedLockCleanup = function()
             pcall(function() c:Disconnect() end)
         end
     end
+
+    -- Reset table
     _G.SpeedLockConnections = {}
 
-    -- Reset speed
-    local plr = game.Players.LocalPlayer
-    if plr.Character and plr.Character:FindFirstChild("Humanoid") then
-        plr.Character.Humanoid.WalkSpeed = 16
-        plr.Character.Humanoid.JumpPower = 50
-    end
-
-    -- Remove noclip
-    if plr.Character then
-        for _, part in ipairs(plr.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
-        end
-    end
-
-    -- Remove fly forces
-    if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-        local hrp = plr.Character.HumanoidRootPart
-        if hrp:FindFirstChild("BodyVelocity") then hrp.BodyVelocity:Destroy() end
-        if hrp:FindFirstChild("BodyGyro") then hrp.BodyGyro:Destroy() end
-    end
-
-    -- Reset globals
-    _G.SpeedLockFlying = false
-    _G.SpeedLockNoclip = false
-    _G.SpeedLockToggle = false
-    _G.SpeedLockHold = false
+    -- IMPORTANT FIX:
+    -- ❗ Do NOT touch character on re-execution
+    -- No WalkSpeed reset
+    -- No JumpPower reset
+    -- No collisions reset
+    -- No BodyVelocity/BodyGyro removal
+    -- No modifying humanoid
 end
 
 -- Run cleanup now if script is re-executed
