@@ -1,0 +1,280 @@
+-- Player Aimbot + Optimized ESP
+-- FULL FIXED VERSION (event-based ESP, no lag)
+
+-- ===============================
+-- RESET ON RE-EXECUTION
+-- ===============================
+if getgenv().inputConnection then getgenv().inputConnection:Disconnect() end
+if getgenv().aimbotLoop then getgenv().aimbotLoop:Disconnect() end
+if getgenv().FOVring then getgenv().FOVring:Remove() end
+
+for _, v in pairs(game:GetService("Players"):GetPlayers()) do
+    if v.Character then
+        local esp = v.Character:FindFirstChild("AimbotESP")
+        if esp then esp:Destroy() end
+        local hl = v.Character:FindFirstChild("AimbotHighlight")
+        if hl then hl:Destroy() end
+    end
+end
+
+-- ===============================
+-- SETTINGS
+-- ===============================
+getgenv().teamCheck = false
+getgenv().fov = 120
+getgenv().smoothing = 1
+getgenv().predictionFactor = 0
+getgenv().highlightEnabled = true
+
+getgenv().Toggle = false -- false = hold RMB, true = toggle
+getgenv().ToggleKey = Enum.KeyCode.E
+getgenv().lockPartName = "Head"
+
+-- ESP
+getgenv().ESPenabled = true
+getgenv().ESPtoggleKey = Enum.KeyCode.F4
+getgenv().ESPcolor = Color3.fromRGB(255, 0, 0)
+
+-- ===============================
+-- VARIABLES
+-- ===============================
+getgenv().currentTarget = nil
+getgenv().aimbotEnabled = true
+getgenv().toggleState = false
+getgenv().debounce = false
+
+-- ===============================
+-- SERVICES
+-- ===============================
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local StarterGui = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- ===============================
+-- NOTIFY
+-- ===============================
+local function notify(title, text, duration)
+    StarterGui:SetCore("SendNotification", {
+        Title = title,
+        Text = text,
+        Duration = duration or 3
+    })
+end
+
+notify("Universal Aimbot + ESP", "Loaded successfully", 4)
+
+-- ===============================
+-- FOV CIRCLE
+-- ===============================
+getgenv().FOVring = Drawing.new("Circle")
+getgenv().FOVring.Visible = true
+getgenv().FOVring.Thickness = 1.5
+getgenv().FOVring.Radius = getgenv().fov
+getgenv().FOVring.Transparency = 0.6
+getgenv().FOVring.Color = Color3.fromRGB(255, 128, 128)
+getgenv().FOVring.Position = Camera.ViewportSize / 2
+
+-- ===============================
+-- ESP FUNCTIONS (EVENT BASED)
+-- ===============================
+local function addESP(character)
+    if not getgenv().ESPenabled then return end
+    if character:FindFirstChild("AimbotESP") then return end
+
+    local esp = Instance.new("Highlight")
+    esp.Name = "AimbotESP"
+    esp.FillTransparency = 1
+    esp.OutlineColor = getgenv().ESPcolor
+    esp.OutlineTransparency = 0
+    esp.Adornee = character
+    esp.Parent = character
+end
+
+local function removeESP(character)
+    local esp = character:FindFirstChild("AimbotESP")
+    if esp then esp:Destroy() end
+end
+
+-- ===============================
+-- PLAYER JOIN / RESPAWN / LEAVE
+-- ===============================
+local function setupPlayer(player)
+    if player == LocalPlayer then return end
+
+    if player.Character then
+        addESP(player.Character)
+    end
+
+    player.CharacterAdded:Connect(function(char)
+        task.wait(0.5)
+        addESP(char)
+    end)
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+    setupPlayer(player)
+end
+
+Players.PlayerAdded:Connect(setupPlayer)
+
+Players.PlayerRemoving:Connect(function(player)
+    if player.Character then
+        removeESP(player.Character)
+    end
+end)
+
+-- ===============================
+-- PRINT CHARACTER PART NAMES
+-- ===============================
+local function printCharacterParts(character)
+    print("==== CHARACTER PARTS ====")
+    for _, v in ipairs(character:GetDescendants()) do
+        if v:IsA("BasePart") then
+            print(v.Name)
+        end
+    end
+    print("==== END ====")
+end
+
+if LocalPlayer.Character then
+    printCharacterParts(LocalPlayer.Character)
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    printCharacterParts(char)
+end)
+
+-- ===============================
+-- AIMBOT FUNCTIONS
+-- ===============================
+local function getClosestTarget()
+    local closest, shortest = nil, math.huge
+    local center = Camera.ViewportSize / 2
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local part = player.Character:FindFirstChild(getgenv().lockPartName)
+            local hum = player.Character:FindFirstChild("Humanoid")
+            if part and hum and hum.Health > 0 then
+                if not getgenv().teamCheck or player.Team ~= LocalPlayer.Team then
+                    local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                    local dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                    if onScreen and dist <= getgenv().fov and dist < shortest then
+                        closest = player
+                        shortest = dist
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local function predictPosition(target)
+    local part = target.Character:FindFirstChild(getgenv().lockPartName)
+    if part then
+        return part.Position + (part.Velocity * getgenv().predictionFactor)
+    end
+end
+
+local function highlightTarget(target)
+    if not getgenv().highlightEnabled or not target or not target.Character then return end
+
+    local old = target.Character:FindFirstChild("AimbotHighlight")
+    if old then old:Destroy() end
+
+    local hl = Instance.new("Highlight")
+    hl.Name = "AimbotHighlight"
+    hl.Adornee = target.Character
+    hl.FillColor = Color3.fromRGB(255, 128, 128)
+    hl.OutlineColor = Color3.fromRGB(255, 0, 0)
+    hl.Parent = target.Character
+end
+
+local function removeHighlight(target)
+    if target and target.Character then
+        local hl = target.Character:FindFirstChild("AimbotHighlight")
+        if hl then hl:Destroy() end
+    end
+end
+
+-- ===============================
+-- INPUT HANDLING
+-- ===============================
+local function toggleESP()
+    getgenv().ESPenabled = not getgenv().ESPenabled
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then
+            if getgenv().ESPenabled then
+                addESP(player.Character)
+            else
+                removeESP(player.Character)
+            end
+        end
+    end
+
+    notify("ESP", getgenv().ESPenabled and "Enabled" or "Disabled")
+end
+
+local function handleToggle()
+    if getgenv().debounce then return end
+    getgenv().debounce = true
+    getgenv().toggleState = not getgenv().toggleState
+    notify("Aimbot", getgenv().toggleState and "ON" or "OFF")
+    task.wait(0.3)
+    getgenv().debounce = false
+end
+
+getgenv().inputConnection = UIS.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+
+    if input.KeyCode == getgenv().ToggleKey and getgenv().Toggle then
+        handleToggle()
+    elseif input.KeyCode == getgenv().ESPtoggleKey then
+        toggleESP()
+    elseif input.KeyCode == Enum.KeyCode.End then
+        getgenv().aimbotEnabled = not getgenv().aimbotEnabled
+        notify("Aimbot System", getgenv().aimbotEnabled and "Enabled" or "Disabled")
+    end
+end)
+
+-- ===============================
+-- AIMBOT LOOP (RENDER ONLY WHERE NEEDED)
+-- ===============================
+getgenv().aimbotLoop = RunService.RenderStepped:Connect(function()
+    if not getgenv().aimbotEnabled then return end
+
+    getgenv().FOVring.Position = Camera.ViewportSize / 2
+
+    if not getgenv().Toggle then
+        getgenv().toggleState = UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+    end
+
+    if getgenv().toggleState then
+        if not getgenv().currentTarget or not getgenv().currentTarget.Character then
+            getgenv().currentTarget = getClosestTarget()
+            highlightTarget(getgenv().currentTarget)
+        end
+
+        if getgenv().currentTarget then
+            local pos = predictPosition(getgenv().currentTarget)
+            if pos then
+                Camera.CFrame = Camera.CFrame:Lerp(
+                    CFrame.new(Camera.CFrame.Position, pos),
+                    getgenv().smoothing
+                )
+            end
+            getgenv().FOVring.Color = Color3.fromRGB(0, 255, 0)
+        end
+    else
+        removeHighlight(getgenv().currentTarget)
+        getgenv().currentTarget = nil
+        getgenv().FOVring.Color = Color3.fromRGB(255, 128, 128)
+    end
+end)
