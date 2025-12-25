@@ -38,3 +38,7 @@ getgenv().TextColor = "white" --[[ rgb,white,black, brown,green,cyan,blue,pink,p
 loadstring(game:HttpGet("https://raw.githubusercontent.com/rndmq/Serverlist/refs/heads/main/Server87"))()
 
 
+
+
+aimlock new
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ImShadow2/speedlocks/refs/heads/main/aimlock.lua"))()
