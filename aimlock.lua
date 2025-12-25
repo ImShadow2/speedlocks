@@ -37,7 +37,7 @@ local function sanitize(val)
     return num or 3
 end
 
--- 3. FIXED ESP LOGIC
+-- 3. ESP LOGIC (Persistent & Death Proof)
 local function applyESP(targetPlayer)
     if targetPlayer == player then return end
     
@@ -53,7 +53,7 @@ local function applyESP(targetPlayer)
         highlight.FillTransparency = 1
         highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
         highlight.OutlineTransparency = 0
-        highlight.Enabled = espEnabled -- Respects current toggle state
+        highlight.Enabled = espEnabled
         highlight.Adornee = char
         highlight.Parent = char
     end
@@ -69,12 +69,7 @@ local function updateAllESP()
     for _, p in pairs(Players:GetPlayers()) do
         if p.Character then
             local h = p.Character:FindFirstChild("EliteHighlight")
-            if h then
-                h.Enabled = espEnabled
-            elseif espEnabled then
-                -- Fallback if highlight was deleted
-                applyESP(p)
-            end
+            if h then h.Enabled = espEnabled end
         end
     end
 end
@@ -101,9 +96,7 @@ local mainPanel = Instance.new("Frame")
 mainPanel.Size = UDim2.new(0, 200, 0, 335)
 mainPanel.Position = UDim2.new(1, -220, 0.5, -167)
 mainPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-mainPanel.Active = true
-mainPanel.Draggable = true 
-mainPanel.Parent = screenGui
+mainPanel.Active = true; mainPanel.Draggable = true; mainPanel.Parent = screenGui
 Instance.new("UICorner", mainPanel)
 
 local topBar = Instance.new("Frame")
@@ -165,7 +158,7 @@ methodToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 120); methodToggleBtn.
 local tpRangeIn, tpRangeLabel = createInput("TP Range:", 15, "3")
 tpRangeIn.Visible = false; tpRangeLabel.Visible = false
 
--- 6. Main Logic
+-- 6. Logic Loops
 local connections = {}
 
 local function findSingleTarget()
@@ -204,19 +197,11 @@ connections.renderLoop = RunService.RenderStepped:Connect(function()
                     local myRoot = player.Character.HumanoidRootPart
                     local goalCFrame = root.CFrame * CFrame.new(0, 0, tpDistance)
                     
-                    if useZeroGravity then
-                        workspace.Gravity = 0
-                        myRoot.Velocity = Vector3.new(0,0,0)
-                    else
-                        workspace.Gravity = originalGravity
-                    end
+                    if useZeroGravity then workspace.Gravity = 0; myRoot.Velocity = Vector3.new(0,0,0)
+                    else workspace.Gravity = originalGravity end
 
-                    if tpMethod == "Teleport" then
-                        myRoot.CFrame = goalCFrame
-                    else 
-                        myRoot.CFrame = myRoot.CFrame:Lerp(goalCFrame, 0.2)
-                        myRoot.Velocity = (goalCFrame.Position - myRoot.Position).Unit * 60
-                    end
+                    if tpMethod == "Teleport" then myRoot.CFrame = goalCFrame
+                    else myRoot.CFrame = myRoot.CFrame:Lerp(goalCFrame, 0.2); myRoot.Velocity = (goalCFrame.Position - myRoot.Position).Unit * 60 end
                 end
             else lockedTargetPart = findSingleTarget() end
         end
@@ -249,31 +234,24 @@ tpToggleBtn.MouseButton1Click:Connect(function()
     tpEnabled = not tpEnabled
     if tpEnabled then
         tpToggleBtn.Text = "TP MODE: ON"; tpToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 130, 30)
-        tpRangeIn.Visible = true; tpRangeLabel.Visible = true
-        gravToggleBtn.Visible = true; methodToggleBtn.Visible = true
+        tpRangeIn.Visible = true; tpRangeLabel.Visible = true; gravToggleBtn.Visible = true; methodToggleBtn.Visible = true
         mainPanel.Size = UDim2.new(0, 200, 0, 445)
-        -- Reposition
         radIn.Position = UDim2.new(0, 95, 0, 50); content:FindFirstChild("Radius:").Position = UDim2.new(0, 10, 0, 50)
         colIn.Position = UDim2.new(0, 95, 0, 85); content:FindFirstChild("Hex:").Position = UDim2.new(0, 10, 0, 85)
         smthIn.Position = UDim2.new(0, 95, 0, 120); content:FindFirstChild("Smooth:").Position = UDim2.new(0, 10, 0, 120)
         partIn.Position = UDim2.new(0, 95, 0, 155); content:FindFirstChild("Aim Part:").Position = UDim2.new(0, 10, 0, 155)
         tpRangeIn.Position = UDim2.new(0, 95, 0, 15); tpRangeLabel.Position = UDim2.new(0, 10, 0, 15)
-        masterBtn.Position = UDim2.new(0, 10, 0, 195); bindBtn.Position = UDim2.new(0, 10, 0, 235)
-        espToggleBtn.Position = UDim2.new(0, 10, 0, 270); tpToggleBtn.Position = UDim2.new(0, 10, 0, 310)
-        gravToggleBtn.Position = UDim2.new(0, 10, 0, 345); methodToggleBtn.Position = UDim2.new(0, 10, 0, 380)
+        masterBtn.Position = UDim2.new(0, 10, 0, 195); bindBtn.Position = UDim2.new(0, 10, 0, 235); espToggleBtn.Position = UDim2.new(0, 10, 0, 270); tpToggleBtn.Position = UDim2.new(0, 10, 0, 310); gravToggleBtn.Position = UDim2.new(0, 10, 0, 345); methodToggleBtn.Position = UDim2.new(0, 10, 0, 380)
     else
         workspace.Gravity = originalGravity
         tpToggleBtn.Text = "TP MODE: OFF"; tpToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        tpRangeIn.Visible = false; tpRangeLabel.Visible = false
-        gravToggleBtn.Visible = false; methodToggleBtn.Visible = false
+        tpRangeIn.Visible = false; tpRangeLabel.Visible = false; gravToggleBtn.Visible = false; methodToggleBtn.Visible = false
         mainPanel.Size = UDim2.new(0, 200, 0, 335)
-        -- Restore
         radIn.Position = UDim2.new(0, 95, 0, 15); content:FindFirstChild("Radius:").Position = UDim2.new(0, 10, 0, 15)
         colIn.Position = UDim2.new(0, 95, 0, 50); content:FindFirstChild("Hex:").Position = UDim2.new(0, 10, 0, 50)
         smthIn.Position = UDim2.new(0, 95, 0, 85); content:FindFirstChild("Smooth:").Position = UDim2.new(0, 10, 0, 85)
         partIn.Position = UDim2.new(0, 95, 0, 120); content:FindFirstChild("Aim Part:").Position = UDim2.new(0, 10, 0, 120)
-        masterBtn.Position = UDim2.new(0, 10, 0, 160); bindBtn.Position = UDim2.new(0, 10, 0, 200)
-        espToggleBtn.Position = UDim2.new(0, 10, 0, 235); tpToggleBtn.Position = UDim2.new(0, 10, 0, 275)
+        masterBtn.Position = UDim2.new(0, 10, 0, 160); bindBtn.Position = UDim2.new(0, 10, 0, 200); espToggleBtn.Position = UDim2.new(0, 10, 0, 235); tpToggleBtn.Position = UDim2.new(0, 10, 0, 275)
     end
 end)
 
@@ -299,15 +277,45 @@ minBtn.MouseButton1Click:Connect(function()
 end)
 
 closeBtn.MouseButton1Click:Connect(function() 
-    workspace.Gravity = originalGravity
-    espEnabled = false; updateAllESP()
+    workspace.Gravity = originalGravity; espEnabled = false; updateAllESP()
     for _, conn in pairs(connections) do if conn then conn:Disconnect() end end
     screenGui:Destroy() 
 end)
 
--- Sanitizers
 tpRangeIn.FocusLost:Connect(function() tpDistance = sanitize(tpRangeIn.Text); tpRangeIn.Text = tostring(tpDistance) end)
 radIn.FocusLost:Connect(function() fovRadius = sanitize(radIn.Text); radIn.Text = tostring(fovRadius); circleFrame.Size = UDim2.new(0, fovRadius*2, 0, fovRadius*2) end)
 smthIn.FocusLost:Connect(function() smoothness = sanitize(smthIn.Text); smthIn.Text = tostring(smoothness) end)
 partIn.FocusLost:Connect(function() aimPartName = partIn.Text; lockedTargetPart = nil end)
 bindBtn.MouseButton1Click:Connect(function() bindBtn.Text = "..."; local tempConn; tempConn = UserInputService.InputBegan:Connect(function(input) if input.UserInputType == Enum.KeyCode.Unknown or input.UserInputType == Enum.KeyCode.Keyboard then toggleKey = input.KeyCode; bindBtn.Text = "BIND: " .. toggleKey.Name; tempConn:Disconnect() end end) end)
+
+--- 8. DISTINCT PART LOGGING LOGIC ---
+local function logDistinctParts()
+    print("\n")
+    print("====== Player All Parts to Aim =======")
+    
+    local distinctParts = {}
+    local partSet = {}
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            for _, child in pairs(p.Character:GetChildren()) do
+                if child:IsA("BasePart") and not partSet[child.Name] then
+                    partSet[child.Name] = true
+                    table.insert(distinctParts, child.Name)
+                end
+            end
+        end
+    end
+    
+    if #distinctParts > 0 then
+        table.sort(distinctParts) -- Alphabetical order
+        print("Detected Parts: " .. table.concat(distinctParts, ", "))
+    else
+        print("No player parts detected. Is the server empty?")
+    end
+    
+    print("==============  End  ==============")
+    print("\n")
+end
+
+task.spawn(logDistinctParts)
