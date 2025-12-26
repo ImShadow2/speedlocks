@@ -27,6 +27,7 @@ local tpEnabled = false
 local useZeroGravity = true 
 local tpMethod = "Teleport" 
 local espEnabled = false 
+local targetMode = "Players" -- Modes: "Players", "NPCs", "Both"
 local masterLocked = true 
 local toggleKey = Enum.KeyCode.End 
 local lockedTargetPart = nil 
@@ -38,26 +39,30 @@ local function sanitize(val)
 end
 
 -- 3. ESP LOGIC (Persistent & Death Proof)
+local function createHighlight(char)
+    if not char then return end
+    local old = char:FindFirstChild("EliteHighlight")
+    if old then old:Destroy() end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "EliteHighlight"
+    highlight.FillTransparency = 1
+    
+    -- Color coding based on target type
+    if Players:GetPlayerFromCharacter(char) then
+        highlight.OutlineColor = Color3.fromRGB(255, 0, 0) -- Red for Players
+    else
+        highlight.OutlineColor = Color3.fromRGB(170, 0, 255) -- Purple for NPCs
+    end
+    
+    highlight.OutlineTransparency = 0
+    highlight.Enabled = espEnabled
+    highlight.Adornee = char
+    highlight.Parent = char
+end
+
 local function applyESP(targetPlayer)
     if targetPlayer == player then return end
-    
-    local function createHighlight(char)
-        if not char then return end
-        char:WaitForChild("HumanoidRootPart", 10)
-        
-        local old = char:FindFirstChild("EliteHighlight")
-        if old then old:Destroy() end
-
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "EliteHighlight"
-        highlight.FillTransparency = 1
-        highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-        highlight.OutlineTransparency = 0
-        highlight.Enabled = espEnabled
-        highlight.Adornee = char
-        highlight.Parent = char
-    end
-
     targetPlayer.CharacterAdded:Connect(createHighlight)
     if targetPlayer.Character then createHighlight(targetPlayer.Character) end
 end
@@ -66,10 +71,31 @@ for _, p in pairs(Players:GetPlayers()) do applyESP(p) end
 Players.PlayerAdded:Connect(applyESP)
 
 local function updateAllESP()
+    -- Clear/Update players
     for _, p in pairs(Players:GetPlayers()) do
         if p.Character then
             local h = p.Character:FindFirstChild("EliteHighlight")
-            if h then h.Enabled = espEnabled end
+            if h then h.Enabled = (espEnabled and (targetMode == "Players" or targetMode == "Both")) end
+        end
+    end
+    -- Update NPCs
+    if espEnabled and (targetMode == "NPCs" or targetMode == "Both") then
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Humanoid") and obj.Parent and not Players:GetPlayerFromCharacter(obj.Parent) then
+                if not obj.Parent:FindFirstChild("EliteHighlight") then
+                    createHighlight(obj.Parent)
+                else
+                    obj.Parent.EliteHighlight.Enabled = true
+                end
+            end
+        end
+    elseif not espEnabled or targetMode == "Players" then
+        -- Hide NPC highlights if not in correct mode
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Humanoid") and obj.Parent then
+                local h = obj.Parent:FindFirstChild("EliteHighlight")
+                if h and not Players:GetPlayerFromCharacter(obj.Parent) then h.Enabled = false end
+            end
         end
     end
 end
@@ -93,8 +119,8 @@ Instance.new("UICorner", circleFrame).CornerRadius = UDim.new(1, 0)
 
 -- 5. Menu Creation
 local mainPanel = Instance.new("Frame")
-mainPanel.Size = UDim2.new(0, 200, 0, 335)
-mainPanel.Position = UDim2.new(1, -220, 0.5, -167)
+mainPanel.Size = UDim2.new(0, 200, 0, 370) 
+mainPanel.Position = UDim2.new(1, -220, 0.5, -185)
 mainPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 mainPanel.Active = true; mainPanel.Draggable = true; mainPanel.Parent = screenGui
 Instance.new("UICorner", mainPanel)
@@ -131,20 +157,24 @@ local colIn = createInput("Hex:", 50, "CCCCCC")
 local smthIn = createInput("Smooth:", 85, "0")
 local partIn = createInput("Aim Part:", 120, "Head")
 
+local modeToggleBtn = Instance.new("TextButton", content)
+modeToggleBtn.Size = UDim2.new(0, 180, 0, 30); modeToggleBtn.Position = UDim2.new(0, 10, 0, 155)
+modeToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60); modeToggleBtn.Text = "TARGET: PLAYERS"; modeToggleBtn.TextColor3 = Color3.new(1, 1, 1); Instance.new("UICorner", modeToggleBtn)
+
 local masterBtn = Instance.new("TextButton", content)
-masterBtn.Size = UDim2.new(0, 180, 0, 30); masterBtn.Position = UDim2.new(0, 10, 0, 160)
+masterBtn.Size = UDim2.new(0, 180, 0, 30); masterBtn.Position = UDim2.new(0, 10, 0, 195)
 masterBtn.BackgroundColor3 = Color3.fromRGB(30, 130, 30); masterBtn.Text = "SYSTEM: ACTIVE"; masterBtn.TextColor3 = Color3.new(1, 1, 1); Instance.new("UICorner", masterBtn)
 
 local bindBtn = Instance.new("TextButton", content)
-bindBtn.Size = UDim2.new(0, 180, 0, 25); bindBtn.Position = UDim2.new(0, 10, 0, 200)
+bindBtn.Size = UDim2.new(0, 180, 0, 25); bindBtn.Position = UDim2.new(0, 10, 0, 235)
 bindBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45); bindBtn.Text = "BIND: " .. toggleKey.Name; bindBtn.TextColor3 = Color3.new(1, 1, 1); Instance.new("UICorner", bindBtn)
 
 local espToggleBtn = Instance.new("TextButton", content)
-espToggleBtn.Size = UDim2.new(0, 180, 0, 30); espToggleBtn.Position = UDim2.new(0, 10, 0, 235)
+espToggleBtn.Size = UDim2.new(0, 180, 0, 30); espToggleBtn.Position = UDim2.new(0, 10, 0, 270)
 espToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45); espToggleBtn.Text = "ESP: OFF"; espToggleBtn.TextColor3 = Color3.new(1, 1, 1); Instance.new("UICorner", espToggleBtn)
 
 local tpToggleBtn = Instance.new("TextButton", content)
-tpToggleBtn.Size = UDim2.new(0, 180, 0, 30); tpToggleBtn.Position = UDim2.new(0, 10, 0, 275)
+tpToggleBtn.Size = UDim2.new(0, 180, 0, 30); tpToggleBtn.Position = UDim2.new(0, 10, 0, 310)
 tpToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45); tpToggleBtn.Text = "TP MODE: OFF"; tpToggleBtn.TextColor3 = Color3.new(1, 1, 1); Instance.new("UICorner", tpToggleBtn)
 
 local gravToggleBtn = Instance.new("TextButton", content)
@@ -165,15 +195,32 @@ local function findSingleTarget()
     if not masterLocked then return nil end
     local target, dist = nil, math.huge
     local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            local part = p.Character:FindFirstChild(aimPartName)
-            if part and part:IsA("BasePart") then
-                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                if onScreen then
-                    local mag = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                    if mag <= fovRadius and mag < dist then target = part; dist = mag end
-                end
+    
+    local candidates = {}
+    
+    -- Logic for Players
+    if targetMode == "Players" or targetMode == "Both" then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= player and p.Character then table.insert(candidates, p.Character) end
+        end
+    end
+    
+    -- Logic for NPCs
+    if targetMode == "NPCs" or targetMode == "Both" then
+        for _, obj in pairs(workspace:GetDescendants()) do
+            if obj:IsA("Humanoid") and obj.Parent and not Players:GetPlayerFromCharacter(obj.Parent) then
+                table.insert(candidates, obj.Parent)
+            end
+        end
+    end
+
+    for _, char in pairs(candidates) do
+        local part = char:FindFirstChild(aimPartName)
+        if part and part:IsA("BasePart") then
+            local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+            if onScreen then
+                local mag = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+                if mag <= fovRadius and mag < dist then target = part; dist = mag end
             end
         end
     end
@@ -211,6 +258,24 @@ connections.renderLoop = RunService.RenderStepped:Connect(function()
 end)
 
 -- 7. Interaction Handlers
+modeToggleBtn.MouseButton1Click:Connect(function()
+    if targetMode == "Players" then
+        targetMode = "NPCs"
+        modeToggleBtn.Text = "TARGET: NPCs"
+        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 40, 150)
+    elseif targetMode == "NPCs" then
+        targetMode = "Both"
+        modeToggleBtn.Text = "TARGET: BOTH"
+        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200) -- Blue for Both
+    else
+        targetMode = "Players"
+        modeToggleBtn.Text = "TARGET: PLAYERS"
+        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end
+    lockedTargetPart = nil
+    updateAllESP()
+end)
+
 espToggleBtn.MouseButton1Click:Connect(function()
     espEnabled = not espEnabled
     espToggleBtn.Text = espEnabled and "ESP: ON" or "ESP: OFF"
@@ -235,23 +300,16 @@ tpToggleBtn.MouseButton1Click:Connect(function()
     if tpEnabled then
         tpToggleBtn.Text = "TP MODE: ON"; tpToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 130, 30)
         tpRangeIn.Visible = true; tpRangeLabel.Visible = true; gravToggleBtn.Visible = true; methodToggleBtn.Visible = true
-        mainPanel.Size = UDim2.new(0, 200, 0, 445)
-        radIn.Position = UDim2.new(0, 95, 0, 50); content:FindFirstChild("Radius:").Position = UDim2.new(0, 10, 0, 50)
-        colIn.Position = UDim2.new(0, 95, 0, 85); content:FindFirstChild("Hex:").Position = UDim2.new(0, 10, 0, 85)
-        smthIn.Position = UDim2.new(0, 95, 0, 120); content:FindFirstChild("Smooth:").Position = UDim2.new(0, 10, 0, 120)
-        partIn.Position = UDim2.new(0, 95, 0, 155); content:FindFirstChild("Aim Part:").Position = UDim2.new(0, 10, 0, 155)
-        tpRangeIn.Position = UDim2.new(0, 95, 0, 15); tpRangeLabel.Position = UDim2.new(0, 10, 0, 15)
-        masterBtn.Position = UDim2.new(0, 10, 0, 195); bindBtn.Position = UDim2.new(0, 10, 0, 235); espToggleBtn.Position = UDim2.new(0, 10, 0, 270); tpToggleBtn.Position = UDim2.new(0, 10, 0, 310); gravToggleBtn.Position = UDim2.new(0, 10, 0, 345); methodToggleBtn.Position = UDim2.new(0, 10, 0, 380)
+        mainPanel.Size = UDim2.new(0, 200, 0, 480)
+        modeToggleBtn.Position = UDim2.new(0, 10, 0, 190)
+        masterBtn.Position = UDim2.new(0, 10, 0, 230); bindBtn.Position = UDim2.new(0, 10, 0, 270); espToggleBtn.Position = UDim2.new(0, 10, 0, 305); tpToggleBtn.Position = UDim2.new(0, 10, 0, 345); gravToggleBtn.Position = UDim2.new(0, 10, 0, 380); methodToggleBtn.Position = UDim2.new(0, 10, 0, 415)
     else
         workspace.Gravity = originalGravity
         tpToggleBtn.Text = "TP MODE: OFF"; tpToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
         tpRangeIn.Visible = false; tpRangeLabel.Visible = false; gravToggleBtn.Visible = false; methodToggleBtn.Visible = false
-        mainPanel.Size = UDim2.new(0, 200, 0, 335)
-        radIn.Position = UDim2.new(0, 95, 0, 15); content:FindFirstChild("Radius:").Position = UDim2.new(0, 10, 0, 15)
-        colIn.Position = UDim2.new(0, 95, 0, 50); content:FindFirstChild("Hex:").Position = UDim2.new(0, 10, 0, 50)
-        smthIn.Position = UDim2.new(0, 95, 0, 85); content:FindFirstChild("Smooth:").Position = UDim2.new(0, 10, 0, 85)
-        partIn.Position = UDim2.new(0, 95, 0, 120); content:FindFirstChild("Aim Part:").Position = UDim2.new(0, 10, 0, 120)
-        masterBtn.Position = UDim2.new(0, 10, 0, 160); bindBtn.Position = UDim2.new(0, 10, 0, 200); espToggleBtn.Position = UDim2.new(0, 10, 0, 235); tpToggleBtn.Position = UDim2.new(0, 10, 0, 275)
+        mainPanel.Size = UDim2.new(0, 200, 0, 370)
+        modeToggleBtn.Position = UDim2.new(0, 10, 0, 155)
+        masterBtn.Position = UDim2.new(0, 10, 0, 195); bindBtn.Position = UDim2.new(0, 10, 0, 235); espToggleBtn.Position = UDim2.new(0, 10, 0, 270); tpToggleBtn.Position = UDim2.new(0, 10, 0, 310)
     end
 end)
 
@@ -273,7 +331,7 @@ end)
 minBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized; content.Visible = not isMinimized
     if isMinimized then mainPanel.Size = UDim2.new(0, 200, 0, 25); minBtn.Text = "+"
-    else mainPanel.Size = tpEnabled and UDim2.new(0, 200, 0, 445) or UDim2.new(0, 200, 0, 335); minBtn.Text = "−" end
+    else mainPanel.Size = tpEnabled and UDim2.new(0, 200, 0, 480) or UDim2.new(0, 200, 0, 370); minBtn.Text = "−" end
 end)
 
 closeBtn.MouseButton1Click:Connect(function() 
@@ -288,34 +346,7 @@ smthIn.FocusLost:Connect(function() smoothness = sanitize(smthIn.Text); smthIn.T
 partIn.FocusLost:Connect(function() aimPartName = partIn.Text; lockedTargetPart = nil end)
 bindBtn.MouseButton1Click:Connect(function() bindBtn.Text = "..."; local tempConn; tempConn = UserInputService.InputBegan:Connect(function(input) if input.UserInputType == Enum.KeyCode.Unknown or input.UserInputType == Enum.KeyCode.Keyboard then toggleKey = input.KeyCode; bindBtn.Text = "BIND: " .. toggleKey.Name; tempConn:Disconnect() end end) end)
 
---- 8. DISTINCT PART LOGGING LOGIC ---
 local function logDistinctParts()
-    print("\n")
-    print("====== Player All Parts to Aim =======")
-    
-    local distinctParts = {}
-    local partSet = {}
-
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            for _, child in pairs(p.Character:GetChildren()) do
-                if child:IsA("BasePart") and not partSet[child.Name] then
-                    partSet[child.Name] = true
-                    table.insert(distinctParts, child.Name)
-                end
-            end
-        end
-    end
-    
-    if #distinctParts > 0 then
-        table.sort(distinctParts) -- Alphabetical order
-        print("Detected Parts: " .. table.concat(distinctParts, ", "))
-    else
-        print("No player parts detected. Is the server empty?")
-    end
-    
-    print("==============  End  ==============")
-    print("\n")
+    print("====== Target Mode Context Applied =======")
 end
-
 task.spawn(logDistinctParts)
