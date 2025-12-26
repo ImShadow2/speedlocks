@@ -40,7 +40,7 @@ local LOADERS = {
     {Name = "Universal", Description = "Load universal GUI script", URL = "https://raw.githubusercontent.com/ImShadow2/3-universal-gui/main/3universalgui.lua"},
     {Name = "Part Esp", Description = "Load Esp part", URL = "https://raw.githubusercontent.com/ImShadow2/partesp/main/partespplustp.lua"},
     {Name = "Opacity", Description = "Edit Opacity 1-10", URL = "https://raw.githubusercontent.com/ImShadow2/speedlocks/main/opacity.lua"},
-    {Name = "AimLock", Description = "Tp and Aim", URL = "https://raw.githubusercontent.com/ImShadow2/speedlocks/refs/heads/main/3GuiLoader.lua"}
+    {Name = "AimLock", Description = "Tp and Aim", URL = "https://raw.githubusercontent.com/ImShadow2/speedlocks/refs/heads/main/aimlock.lua"}
 }
 
 --// Safe Load Function
