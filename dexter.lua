@@ -131,6 +131,13 @@ local filters = {"All","Part","Model","Folder","Script","LocalScript"}
 local filterIndex = 1
 local statusMap = {}
 
+-- RELATED NAMES MAP
+local relatedNames = {
+    Stone = {"stone1","stone_block","rock"},
+    Wood  = {"wood1","plank","log"},
+    Coin  = {"coin1","gold_coin","silver_coin"}
+}
+
 -- UTIL FUNCTIONS
 local function HRP()
     local c = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -192,9 +199,39 @@ local function Refresh()
     local filter = filters[filterIndex]
 
     for _,obj in ipairs(currentInstance:GetChildren()) do
-        if search ~= "" and not obj.Name:lower():find(search) then continue end
-        if filter ~= "All" and not obj.ClassName:find(filter) then continue end
+        local name = obj.Name:lower()
+        local show = true
 
+        -- SEARCH LOGIC
+        if search ~= "" then
+            -- direct match
+            if name:find(search) then
+                show = true
+            else
+                -- check relatedNames
+                show = false
+                for key, list in pairs(relatedNames) do
+                    if key:lower():find(search) then
+                        for _, relName in ipairs(list) do
+                            if name == relName:lower() then
+                                show = true
+                                break
+                            end
+                        end
+                    end
+                    if show then break end
+                end
+            end
+        end
+
+        -- FILTER
+        if filter ~= "All" and not obj.ClassName:find(filter) then
+            show = false
+        end
+
+        if not show then continue end
+
+        -- ROW
         local Row = Instance.new("Frame")
         Row.Size = UDim2.new(1,-10,0,28)
         Row.BackgroundColor3 = Color3.fromRGB(35,35,35)
@@ -297,8 +334,28 @@ end)
 
 BringAllBtn.MouseButton1Click:Connect(function()
     for _,obj in ipairs(currentInstance:GetChildren()) do
-        if Search.Text ~= "" and not obj.Name:lower():find(Search.Text:lower()) then continue end
-        if obj:IsA("Model") or obj:IsA("BasePart") then
+        local name = obj.Name:lower()
+        local show = true
+        local search = Search.Text:lower()
+
+        if search ~= "" then
+            if not name:find(search) then
+                show = false
+                for key, list in pairs(relatedNames) do
+                    if key:lower():find(search) then
+                        for _, relName in ipairs(list) do
+                            if name == relName:lower() then
+                                show = true
+                                break
+                            end
+                        end
+                    end
+                    if show then break end
+                end
+            end
+        end
+
+        if show and (obj:IsA("Model") or obj:IsA("BasePart")) then
             bring(obj)
         end
     end
