@@ -282,6 +282,7 @@ local function Refresh()
             TP.MouseButton1Click:Connect(function() tp(obj) end)
         end
 
+        -- FOLDER / MODEL >
         if obj:IsA("Folder") or obj:IsA("Model") then
             local Go = Instance.new("TextButton")
             Go.Size = UDim2.new(0,30,0,22)
@@ -295,6 +296,7 @@ local function Refresh()
         end
     end
 end
+
 
 -- EVENTS
 Search:GetPropertyChangedSignal("Text"):Connect(Refresh)
