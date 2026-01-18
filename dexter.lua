@@ -1,7 +1,8 @@
 --// Modern Dex Ultimate GUI (CoreGui Overlay)
+
+-- SERVICES
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local CoreGui = game:GetService("CoreGui")
 
@@ -14,12 +15,12 @@ end
 local DexUI = Instance.new("ScreenGui")
 DexUI.Name = "Dex_Ultimate"
 DexUI.ResetOnSpawn = false
+DexUI.IgnoreGuiInset = true
 DexUI.Parent = CoreGui
-DexUI.IgnoreGuiInset = true -- overlay everything
 
 -- MAIN FRAME
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 438, 0, 480) -- medium size
+Main.Size = UDim2.new(0, 438, 0, 480)
 Main.Position = UDim2.new(0.5, -210, 0.5, -240)
 Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
 Main.BorderSizePixel = 0
@@ -49,7 +50,6 @@ Title.BackgroundTransparency = 1
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = TitleBar
 
--- CLOSE BUTTON [ X ]
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0,30,0,20)
 CloseBtn.Position = UDim2.new(1,-35,0,5)
@@ -63,7 +63,7 @@ CloseBtn.MouseButton1Click:Connect(function()
     DexUI:Destroy()
 end)
 
--- BREADCRUMB BAR
+-- PATH BAR
 local PathBar = Instance.new("TextLabel")
 PathBar.Size = UDim2.new(1,-10,0,22)
 PathBar.Position = UDim2.new(0,5,0,35)
@@ -72,7 +72,6 @@ PathBar.TextColor3 = Color3.fromRGB(160,160,160)
 PathBar.TextXAlignment = Enum.TextXAlignment.Left
 PathBar.Font = Enum.Font.Gotham
 PathBar.TextSize = 14
-PathBar.Text = "workspace"
 PathBar.BorderSizePixel = 0
 PathBar.Parent = Main
 
@@ -85,31 +84,32 @@ local function makeBtn(text, x, w, y)
     b.BackgroundColor3 = Color3.fromRGB(45,45,45)
     b.TextColor3 = Color3.fromRGB(220,220,220)
     b.BorderSizePixel = 0
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0,6)
-    corner.Parent = b
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,6)
+    c.Parent = b
     b.Parent = Main
     return b
 end
 
 -- CONTROLS
-local BackBtn     = makeBtn("<",        5,   28, 60)
-local Search      = Instance.new("TextBox")
+local BackBtn = makeBtn("<", 5, 28, 60)
+
+local Search = Instance.new("TextBox")
 Search.Size = UDim2.new(0, 120, 0, 26)
 Search.Position = UDim2.new(0, 38, 0, 60)
 Search.PlaceholderText = "[ search ]"
 Search.BackgroundColor3 = Color3.fromRGB(40,40,40)
-Search.TextColor3 = Color3.fromRGB(1,1,1)
+Search.TextColor3 = Color3.fromRGB(255,255,255)
 Search.BorderSizePixel = 0
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0,6)
-corner.Parent = Search
+local sc = Instance.new("UICorner")
+sc.CornerRadius = UDim.new(0,6)
+sc.Parent = Search
 Search.Parent = Main
 
-local FilterBtn   = makeBtn("All",       165, 60, 60)
-local ClearBtn    = makeBtn("Clear",     230, 55, 60)
+local FilterBtn   = makeBtn("All", 165, 60, 60)
+local ClearBtn    = makeBtn("Clear", 230, 55, 60)
 local BringAllBtn = makeBtn("Bring All", 290, 80, 60)
-local BindBtn     = makeBtn("Insert",    375, 60, 60)
+local BindBtn     = makeBtn("Insert", 375, 60, 60)
 
 -- SCROLL
 local Scroll = Instance.new("ScrollingFrame")
@@ -130,15 +130,16 @@ local toggleKey = Enum.KeyCode.Insert
 local filters = {"All","Part","Model","Folder","Script","LocalScript"}
 local filterIndex = 1
 local statusMap = {}
+local visibleObjects = {} -- 🔒 SOURCE OF TRUTH
 
--- RELATED NAMES MAP
+-- RELATED NAMES
 local relatedNames = {
-    Stone = {"stone1","stone_block","rock"},
-    Wood  = {"wood1","plank","log"},
-    Coin  = {"coin1","gold_coin","silver_coin"}
+    Coal  = {"coal","coal1","coal2"},
+    Stone = {"stone","rock"},
+    Wood  = {"wood","log","plank"}
 }
 
--- UTIL FUNCTIONS
+-- UTIL
 local function HRP()
     local c = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
     return c:FindFirstChild("HumanoidRootPart")
@@ -166,28 +167,43 @@ local function tp(obj)
     end
 end
 
-local function getFullPath(obj)
-    local path = {}
-    local o = obj
+-- SEARCH MATCH
+local function matchesSearch(name, search)
+    if search == "" then return true end
+    name = name:lower()
+
+    if name:find(search, 1, true) then
+        return true
+    end
+
+    for key, list in pairs(relatedNames) do
+        if key:lower():find(search, 1, true) then
+            for _,v in ipairs(list) do
+                if name:find(v:lower(), 1, true) then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+-- PATH
+local function updatePath()
+    local p = {}
+    local o = currentInstance
     while o and o ~= game do
-        table.insert(path, 1, o.Name)
+        table.insert(p, 1, o.Name)
         o = o.Parent
     end
-    return table.concat(path, "/")
+    PathBar.Text = table.concat(p, " / ")
 end
 
-local function updatePath()
-    local path = {}
-    local obj = currentInstance
-    while obj and obj ~= game do
-        table.insert(path, 1, obj.Name)
-        obj = obj.Parent
-    end
-    PathBar.Text = table.concat(path, " / ")
-end
-
--- REFRESH FUNCTION
+-- REFRESH (UI + DATA)
 local function Refresh()
+    visibleObjects = {}
+
     for _,v in ipairs(Scroll:GetChildren()) do
         if v:IsA("Frame") then v:Destroy() end
     end
@@ -199,70 +215,42 @@ local function Refresh()
     local filter = filters[filterIndex]
 
     for _,obj in ipairs(currentInstance:GetChildren()) do
-        local name = obj.Name:lower()
-        local show = true
+        if not matchesSearch(obj.Name, search) then continue end
+        if filter ~= "All" and not obj.ClassName:find(filter) then continue end
 
-        -- SEARCH LOGIC
-        if search ~= "" then
-            -- direct match
-            if name:find(search) then
-                show = true
-            else
-                -- check relatedNames
-                show = false
-                for key, list in pairs(relatedNames) do
-                    if key:lower():find(search) then
-                        for _, relName in ipairs(list) do
-                            if name == relName:lower() then
-                                show = true
-                                break
-                            end
-                        end
-                    end
-                    if show then break end
-                end
-            end
-        end
+        table.insert(visibleObjects, obj)
 
-        -- FILTER
-        if filter ~= "All" and not obj.ClassName:find(filter) then
-            show = false
-        end
-
-        if not show then continue end
+        local fullPath = obj:GetFullName()
+        statusMap[fullPath] = statusMap[fullPath] or 0
 
         -- ROW
         local Row = Instance.new("Frame")
         Row.Size = UDim2.new(1,-10,0,28)
         Row.BackgroundColor3 = Color3.fromRGB(35,35,35)
         Row.BorderSizePixel = 0
-        local rowCorner = Instance.new("UICorner")
-        rowCorner.CornerRadius = UDim.new(0,6)
-        rowCorner.Parent = Row
+        local rc = Instance.new("UICorner")
+        rc.CornerRadius = UDim.new(0,6)
+        rc.Parent = Row
         Row.Parent = Scroll
 
-        local fullPath = getFullPath(obj)
-        if not statusMap[fullPath] then statusMap[fullPath] = 0 end
+        -- STATUS
+        local Status = Instance.new("TextButton")
+        Status.Size = UDim2.new(0,28,0,22)
+        Status.Position = UDim2.new(0,5,0.5,-11)
+        Status.Text = "-"
+        Status.Parent = Row
 
-        -- STATUS BUTTON [ - ]
-        local StatusBtn = Instance.new("TextButton")
-        StatusBtn.Size = UDim2.new(0,28,0,22)
-        StatusBtn.Position = UDim2.new(0,5,0.5,-11)
-        StatusBtn.Text = "-"
-        StatusBtn.Parent = Row
-        local function updateStatusColor()
-            if statusMap[fullPath] == 0 then
-                Row.BackgroundColor3 = Color3.fromRGB(35,35,35)
-            elseif statusMap[fullPath] == 1 then
-                Row.BackgroundColor3 = Color3.fromRGB(0,180,0)
-            elseif statusMap[fullPath] == 2 then
-                Row.BackgroundColor3 = Color3.fromRGB(180,0,0)
-            end
+        local function updateColor()
+            Row.BackgroundColor3 =
+                statusMap[fullPath] == 1 and Color3.fromRGB(0,170,0)
+                or statusMap[fullPath] == 2 and Color3.fromRGB(170,0,0)
+                or Color3.fromRGB(35,35,35)
         end
-        updateStatusColor()
-        StatusBtn.MouseButton1Click:Connect(function()
-            statusMap[fullPath] = (statusMap[fullPath]+1)%3
-            updateStatusColor()
+        updateColor()
+
+        Status.MouseButton1Click:Connect(function()
+            statusMap[fullPath] = (statusMap[fullPath] + 1) % 3
+            updateColor()
         end)
 
         -- LABEL
@@ -272,20 +260,17 @@ local function Refresh()
         Label.BackgroundTransparency = 1
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.Text = "("..obj.ClassName..") "..obj.Name
-        Label.TextColor3 = Color3.new(1,1,1)
         Label.Font = Enum.Font.Gotham
         Label.TextSize = 14
+        Label.TextColor3 = Color3.new(1,1,1)
         Label.Parent = Row
 
-        -- BRING & TP
+        -- BRING / TP
         if obj:IsA("Model") or obj:IsA("BasePart") then
             local Bring = Instance.new("TextButton")
             Bring.Size = UDim2.new(0,45,0,22)
             Bring.Position = UDim2.new(1,-145,0.5,-11)
             Bring.Text = "bring"
-            local bCorner = Instance.new("UICorner")
-            bCorner.CornerRadius = UDim.new(0,6)
-            bCorner.Parent = Bring
             Bring.Parent = Row
             Bring.MouseButton1Click:Connect(function() bring(obj) end)
 
@@ -293,22 +278,15 @@ local function Refresh()
             TP.Size = UDim2.new(0,35,0,22)
             TP.Position = UDim2.new(1,-95,0.5,-11)
             TP.Text = "tp"
-            local tCorner = Instance.new("UICorner")
-            tCorner.CornerRadius = UDim.new(0,6)
-            tCorner.Parent = TP
             TP.Parent = Row
             TP.MouseButton1Click:Connect(function() tp(obj) end)
         end
 
-        -- FOLDER / MODEL >
         if obj:IsA("Folder") or obj:IsA("Model") then
             local Go = Instance.new("TextButton")
             Go.Size = UDim2.new(0,30,0,22)
             Go.Position = UDim2.new(1,-45,0.5,-11)
             Go.Text = ">"
-            local gCorner = Instance.new("UICorner")
-            gCorner.CornerRadius = UDim.new(0,6)
-            gCorner.Parent = Go
             Go.Parent = Row
             Go.MouseButton1Click:Connect(function()
                 currentInstance = obj
@@ -321,41 +299,20 @@ end
 -- EVENTS
 Search:GetPropertyChangedSignal("Text"):Connect(Refresh)
 
+ClearBtn.MouseButton1Click:Connect(function()
+    Search.Text = ""
+    Refresh()
+end)
+
 FilterBtn.MouseButton1Click:Connect(function()
     filterIndex = filterIndex % #filters + 1
     FilterBtn.Text = filters[filterIndex]
     Refresh()
 end)
 
-ClearBtn.MouseButton1Click:Connect(function()
-    Search.Text = ""
-    Refresh()
-end)
-
 BringAllBtn.MouseButton1Click:Connect(function()
-    for _,obj in ipairs(currentInstance:GetChildren()) do
-        local name = obj.Name:lower()
-        local show = true
-        local search = Search.Text:lower()
-
-        if search ~= "" then
-            if not name:find(search) then
-                show = false
-                for key, list in pairs(relatedNames) do
-                    if key:lower():find(search) then
-                        for _, relName in ipairs(list) do
-                            if name == relName:lower() then
-                                show = true
-                                break
-                            end
-                        end
-                    end
-                    if show then break end
-                end
-            end
-        end
-
-        if show and (obj:IsA("Model") or obj:IsA("BasePart")) then
+    for _,obj in ipairs(visibleObjects) do
+        if obj:IsA("Model") or obj:IsA("BasePart") then
             bring(obj)
         end
     end
@@ -363,7 +320,7 @@ end)
 
 BackBtn.MouseButton1Click:Connect(function()
     if currentInstance ~= workspace then
-        currentInstance = currentInstance.Parent or workspace
+        currentInstance = currentInstance.Parent
         Refresh()
     end
 end)
