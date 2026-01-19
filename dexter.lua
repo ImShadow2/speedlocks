@@ -1,4 +1,5 @@
 --// Modern Dex Ultimate GUI (CoreGui Overlay)
+--// Explorer Bring with IY-style Bring/TP
 
 -- SERVICES
 local Players = game:GetService("Players")
@@ -20,18 +21,15 @@ DexUI.Parent = CoreGui
 
 -- MAIN FRAME
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 438, 0, 480)
-Main.Position = UDim2.new(0.5, -210, 0.5, -240)
+Main.Size = UDim2.new(0, 490, 0, 480)
+Main.Position = UDim2.new(0.5, -245, 0.5, -240)
 Main.BackgroundColor3 = Color3.fromRGB(25,25,25)
 Main.BorderSizePixel = 0
 Main.Active = true
 Main.Draggable = true
 Main.ClipsDescendants = true
 Main.Parent = DexUI
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0,12)
-UICorner.Parent = Main
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0,12)
 
 -- TITLE BAR
 local TitleBar = Instance.new("Frame")
@@ -40,7 +38,7 @@ TitleBar.BackgroundColor3 = Color3.fromRGB(35,35,35)
 TitleBar.Parent = Main
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(0.8,0,1,0)
+Title.Size = UDim2.new(1,-40,1,0)
 Title.Position = UDim2.new(0,10,0,0)
 Title.Text = "Explorer Bring"
 Title.Font = Enum.Font.GothamBold
@@ -53,7 +51,7 @@ Title.Parent = TitleBar
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Size = UDim2.new(0,30,0,20)
 CloseBtn.Position = UDim2.new(1,-35,0,5)
-CloseBtn.Text = "✕"
+CloseBtn.Text = "❌"
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 18
 CloseBtn.TextColor3 = Color3.fromRGB(255,100,100)
@@ -84,32 +82,31 @@ local function makeBtn(text, x, w, y)
     b.BackgroundColor3 = Color3.fromRGB(45,45,45)
     b.TextColor3 = Color3.fromRGB(220,220,220)
     b.BorderSizePixel = 0
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0,6)
-    c.Parent = b
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,6)
     b.Parent = Main
     return b
 end
 
 -- CONTROLS
-local BackBtn = makeBtn("<", 5, 28, 60)
+local BackBtn      = makeBtn("◀️", 5, 28, 60)
+local WorkspaceBtn = makeBtn("🔄️", 38, 28, 60)
 
 local Search = Instance.new("TextBox")
 Search.Size = UDim2.new(0, 120, 0, 26)
-Search.Position = UDim2.new(0, 38, 0, 60)
-Search.PlaceholderText = "[ search ]"
+Search.Position = UDim2.new(0, 70, 0, 60)
+Search.PlaceholderText = "Search here"
 Search.BackgroundColor3 = Color3.fromRGB(40,40,40)
 Search.TextColor3 = Color3.fromRGB(255,255,255)
 Search.BorderSizePixel = 0
-local sc = Instance.new("UICorner")
-sc.CornerRadius = UDim.new(0,6)
-sc.Parent = Search
+Instance.new("UICorner", Search).CornerRadius = UDim.new(0,6)
 Search.Parent = Main
 
-local FilterBtn   = makeBtn("All", 165, 60, 60)
-local ClearBtn    = makeBtn("Clear", 230, 55, 60)
-local BringAllBtn = makeBtn("Bring All", 290, 80, 60)
-local BindBtn     = makeBtn("Insert", 375, 60, 60)
+local filters = {"All","Part","Model","Folder","Script","LocalScript"}
+local filterIndex = 1
+local FilterBtn   = makeBtn("All", 195, 60, 60)
+local ClearBtn    = makeBtn("Clear", 260, 55, 60)
+local BringAllBtn = makeBtn("Bring All", 320, 80, 60)
+local BindBtn     = makeBtn("Key: Insert", 405, 80, 60)
 
 -- SCROLL
 local Scroll = Instance.new("ScrollingFrame")
@@ -126,18 +123,9 @@ Layout.Parent = Scroll
 
 -- STATE
 local currentInstance = workspace
-local toggleKey = Enum.KeyCode.Insert
-local filters = {"All","Part","Model","Folder","Script","LocalScript"}
-local filterIndex = 1
 local statusMap = {}
-local visibleObjects = {} -- 🔒 SOURCE OF TRUTH
-
--- RELATED NAMES
-local relatedNames = {
-    Coal  = {"coal","coal1","coal2"},
-    Stone = {"stone","rock"},
-    Wood  = {"wood","log","plank"}
-}
+local visibleObjects = {}
+local toggleKey = Enum.KeyCode.Insert
 
 -- UTIL
 local function HRP()
@@ -145,62 +133,58 @@ local function HRP()
     return c:FindFirstChild("HumanoidRootPart")
 end
 
+local function resolvePart(obj)
+    if obj:IsA("BasePart") then
+        return obj
+    elseif obj:IsA("Model") then
+        return obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
+    end
+end
+
+-- IY-STYLE BRING
 local function bring(obj)
     local hrp = HRP()
     if not hrp then return end
-    local cf = hrp.CFrame * CFrame.new(0,0,-5)
+
     if obj:IsA("Model") then
-        pcall(function() obj:PivotTo(cf) end)
+        local part = resolvePart(obj)
+        if part then
+            local cf = hrp.CFrame * CFrame.new(0,0,-5)
+            pcall(function() obj:PivotTo(cf) end)
+        end
     elseif obj:IsA("BasePart") then
-        obj.CFrame = cf
+        obj.CFrame = hrp.CFrame * CFrame.new(0,0,-5)
     end
 end
 
+-- IY-STYLE TP
 local function tp(obj)
     local hrp = HRP()
     if not hrp then return end
-    if obj:IsA("Model") then
-        local p = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart", true)
-        if p then hrp.CFrame = p.CFrame end
-    elseif obj:IsA("BasePart") then
-        hrp.CFrame = obj.CFrame
+
+    local part = resolvePart(obj)
+    if part then
+        hrp.CFrame = part.CFrame * CFrame.new(0,3,-6)
     end
 end
 
--- SEARCH MATCH
-local function matchesSearch(name, search)
-    if search == "" then return true end
-    name = name:lower()
-
-    if name:find(search, 1, true) then
-        return true
-    end
-
-    for key, list in pairs(relatedNames) do
-        if key:lower():find(search, 1, true) then
-            for _,v in ipairs(list) do
-                if name:find(v:lower(), 1, true) then
-                    return true
-                end
-            end
-        end
-    end
-
-    return false
-end
-
--- PATH
+-- PATH SAFE
 local function updatePath()
-    local p = {}
+    if not currentInstance or not currentInstance:IsDescendantOf(game) then
+        currentInstance = workspace
+    end
+
+    local parts = {}
     local o = currentInstance
-    while o and o ~= game do
-        table.insert(p, 1, o.Name)
+    while o and o ~= workspace do
+        table.insert(parts, 1, o.Name)
         o = o.Parent
     end
-    PathBar.Text = table.concat(p, " / ")
+
+    PathBar.Text = "workspace" .. (#parts > 0 and " / "..table.concat(parts, " / ") or "")
 end
 
--- REFRESH (UI + DATA)
+-- REFRESH
 local function Refresh()
     visibleObjects = {}
 
@@ -215,22 +199,18 @@ local function Refresh()
     local filter = filters[filterIndex]
 
     for _,obj in ipairs(currentInstance:GetChildren()) do
-        if not matchesSearch(obj.Name, search) then continue end
+        if search ~= "" and not obj.Name:lower():find(search, 1, true) then continue end
         if filter ~= "All" and not obj.ClassName:find(filter) then continue end
 
         table.insert(visibleObjects, obj)
-
         local fullPath = obj:GetFullName()
         statusMap[fullPath] = statusMap[fullPath] or 0
 
-        -- ROW
         local Row = Instance.new("Frame")
         Row.Size = UDim2.new(1,-10,0,28)
         Row.BackgroundColor3 = Color3.fromRGB(35,35,35)
         Row.BorderSizePixel = 0
-        local rc = Instance.new("UICorner")
-        rc.CornerRadius = UDim.new(0,6)
-        rc.Parent = Row
+        Instance.new("UICorner", Row).CornerRadius = UDim.new(0,6)
         Row.Parent = Scroll
 
         -- STATUS
@@ -265,38 +245,36 @@ local function Refresh()
         Label.TextColor3 = Color3.new(1,1,1)
         Label.Parent = Row
 
-        -- BRING / TP
+        -- ACTIONS
         if obj:IsA("Model") or obj:IsA("BasePart") then
-            local Bring = Instance.new("TextButton")
-            Bring.Size = UDim2.new(0,45,0,22)
-            Bring.Position = UDim2.new(1,-145,0.5,-11)
-            Bring.Text = "bring"
-            Bring.Parent = Row
-            Bring.MouseButton1Click:Connect(function() bring(obj) end)
+            local BringBtn = Instance.new("TextButton")
+            BringBtn.Size = UDim2.new(0,45,0,22)
+            BringBtn.Position = UDim2.new(1,-145,0.5,-11)
+            BringBtn.Text = "bring"
+            BringBtn.Parent = Row
+            BringBtn.MouseButton1Click:Connect(function() bring(obj) end)
 
-            local TP = Instance.new("TextButton")
-            TP.Size = UDim2.new(0,35,0,22)
-            TP.Position = UDim2.new(1,-95,0.5,-11)
-            TP.Text = "tp"
-            TP.Parent = Row
-            TP.MouseButton1Click:Connect(function() tp(obj) end)
+            local TPBtn = Instance.new("TextButton")
+            TPBtn.Size = UDim2.new(0,35,0,22)
+            TPBtn.Position = UDim2.new(1,-95,0.5,-11)
+            TPBtn.Text = "tp"
+            TPBtn.Parent = Row
+            TPBtn.MouseButton1Click:Connect(function() tp(obj) end)
         end
 
-        -- FOLDER / MODEL >
         if obj:IsA("Folder") or obj:IsA("Model") then
-            local Go = Instance.new("TextButton")
-            Go.Size = UDim2.new(0,30,0,22)
-            Go.Position = UDim2.new(1,-45,0.5,-11)
-            Go.Text = ">"
-            Go.Parent = Row
-            Go.MouseButton1Click:Connect(function()
+            local GoBtn = Instance.new("TextButton")
+            GoBtn.Size = UDim2.new(0,30,0,22)
+            GoBtn.Position = UDim2.new(1,-45,0.5,-11)
+            GoBtn.Text = "▶️"
+            GoBtn.Parent = Row
+            GoBtn.MouseButton1Click:Connect(function()
                 currentInstance = obj
                 Refresh()
             end)
         end
     end
 end
-
 
 -- EVENTS
 Search:GetPropertyChangedSignal("Text"):Connect(Refresh)
@@ -322,22 +300,31 @@ end)
 
 BackBtn.MouseButton1Click:Connect(function()
     if currentInstance ~= workspace then
-        currentInstance = currentInstance.Parent
+        currentInstance = currentInstance.Parent or workspace
         Refresh()
     end
 end)
 
+WorkspaceBtn.MouseButton1Click:Connect(function()
+    currentInstance = workspace
+    Refresh()
+end)
+
+-- KEYBIND BUTTON
 BindBtn.MouseButton1Click:Connect(function()
-    BindBtn.Text = "Press Key..."
-    local c
-    c = UIS.InputBegan:Connect(function(i,gp)
+    BindBtn.Text = "..."
+    local conn
+    conn = UIS.InputBegan:Connect(function(i,gp)
         if gp then return end
-        toggleKey = i.KeyCode
-        BindBtn.Text = toggleKey.Name
-        c:Disconnect()
+        if i.KeyCode ~= Enum.KeyCode.Unknown then
+            toggleKey = i.KeyCode
+            BindBtn.Text = toggleKey.Name
+            conn:Disconnect()
+        end
     end)
 end)
 
+-- TOGGLE GUI
 UIS.InputBegan:Connect(function(i,gp)
     if not gp and i.KeyCode == toggleKey then
         Main.Visible = not Main.Visible
