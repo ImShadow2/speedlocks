@@ -1,3 +1,4 @@
+-- MATRIX_V34_STABLE FULL SCRIPT WITH NOCLIP + FLY FALLING STATE
 -- 1. NUCLEAR SYMMETRICAL CLEANUP & FAIL-SAFE EXECUTION
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
@@ -21,7 +22,7 @@ end
 getgenv().OriginalDurations = getgenv().OriginalDurations or {}
 
 local function WipeAll()
-    _G.KillMenu = true 
+    _G.KillMenu = true
     pcall(function()
         -- Reset Lighting
         local orig = getgenv().OriginalLighting
@@ -43,7 +44,7 @@ local function WipeAll()
             getgenv().FOVCircle:Destroy()
             getgenv().FOVCircle = nil
         end
-        
+
         -- Remove GUIs
         for _, v in pairs(CoreGui:GetChildren()) do
             if v.Name:find("Matrix") then v:Destroy() end
@@ -82,13 +83,14 @@ local Settings = {
     Fullbright = {Status = false},
     NoFog = {Status = false},
     FastInteract = {Status = false},
-    HideGui = {Bind = Enum.KeyCode.Insert, Status = true}
+    HideGui = {Bind = Enum.KeyCode.Insert, Status = true},
+    Noclip = {Status = false, Bind = nil}
 }
 
 -- 4. GUI CONSTRUCTION
 local ScreenGui = Instance.new("ScreenGui", CoreGui); ScreenGui.Name = TAG
 local Outer = Instance.new("Frame", ScreenGui)
-Outer.Size = UDim2.new(0, 360, 0, 440); Outer.Position = UDim2.new(0.5, -180, 0.3, 0)
+Outer.Size = UDim2.new(0, 360, 0, 460); Outer.Position = UDim2.new(0.5, -180, 0.3, 0)
 Outer.BackgroundColor3 = Color3.new(1, 1, 1); Outer.BorderSizePixel = 0; Outer.Active = true; Outer.Draggable = true; Instance.new("UICorner", Outer)
 
 local Main = Instance.new("Frame", Outer)
@@ -120,13 +122,29 @@ local c6 = NewRow("🔦 Fullbright", 255); local bTgl = Instance.new("TextButton
 local c7 = NewRow("🔭 No Fog", 295); local nTgl = Instance.new("TextButton", c7); nTgl.Size = UDim2.new(1, 0, 1, 0); nTgl.Text = "Off"
 local c8 = NewRow("⏩ Fast Interact", 335); local iTgl = Instance.new("TextButton", c8); iTgl.Size = UDim2.new(1, 0, 1, 0); iTgl.Text = "Off"
 local c9 = NewRow("🚫 Hide GUI", 375); local hBnd = Instance.new("TextButton", c9); hBnd.Size = UDim2.new(1, 0, 1, 0); hBnd.Text = "[ Insert ]"
+local c10 = NewRow("🚪 Noclip", 415); local nclipTgl = Instance.new("TextButton", c10); nclipTgl.Size = UDim2.new(1,0,1,0); nclipTgl.Text = "Off"
+nclipTgl.MouseButton1Click:Connect(function()
+    Settings.Noclip.Status = not Settings.Noclip.Status
+    SetStatus(nclipTgl, Settings.Noclip.Status)
+end)
 
-for _, v in pairs(Main:GetDescendants()) do if v:IsA("TextBox") or v:IsA("TextButton") then if v ~= Close then v.BackgroundColor3 = Color3.fromRGB(30, 30, 30); v.TextColor3 = Color3.new(1,1,1); v.Font = Enum.Font.Gotham; v.TextSize = 11; Instance.new("UICorner", v) end end end
+-- UI style
+for _, v in pairs(Main:GetDescendants()) do
+    if v:IsA("TextBox") or v:IsA("TextButton") then
+        if v ~= Close then
+            v.BackgroundColor3 = Color3.fromRGB(30,30,30)
+            v.TextColor3 = Color3.new(1,1,1)
+            v.Font = Enum.Font.Gotham
+            v.TextSize = 11
+            Instance.new("UICorner", v)
+        end
+    end
+end
 
 -- 5. FUNCTIONALITY
 local function SetStatus(btn, stat, isAim)
     btn.Text = stat and (isAim and "On (RMB)" or "On") or (isAim and "Off (RMB)" or "Off")
-    btn.TextColor3 = stat and Color3.new(0, 1, 0.5) or Color3.new(1, 0.3, 0.3)
+    btn.TextColor3 = stat and Color3.new(0,1,0.5) or Color3.new(1,0.3,0.3)
 end
 
 local function SetupPrompt(prompt)
@@ -142,6 +160,9 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if Settings.Fly.Bind and (input.KeyCode == Settings.Fly.Bind or input.UserInputType == Settings.Fly.Bind) then
         Settings.Fly.Status = not Settings.Fly.Status; SetStatus(fBnd, Settings.Fly.Status)
+    end
+    if Settings.Noclip.Bind and (input.KeyCode == Settings.Noclip.Bind or input.UserInputType == Settings.Noclip.Bind) then
+        Settings.Noclip.Status = not Settings.Noclip.Status; SetStatus(nclipTgl, Settings.Noclip.Status)
     end
     if input.KeyCode == Settings.HideGui.Bind then
         Settings.HideGui.Status = not Settings.HideGui.Status; Outer.Visible = Settings.HideGui.Status
@@ -164,7 +185,10 @@ task.spawn(function()
     while not _G.KillMenu do
         pcall(function()
             Outer.BackgroundColor3 = Color3.fromHSV(tick() % 5 / 5, 1, 1)
-            local cam = Workspace.CurrentCamera; local char = LocalPlayer.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local root = char and char:FindFirstChild("HumanoidRootPart")
+            local cam = Workspace.CurrentCamera
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            local root = char and char:FindFirstChild("HumanoidRootPart")
 
             -- Fast Interact logic inside loop for reliability
             if Settings.FastInteract.Status then
@@ -174,21 +198,33 @@ task.spawn(function()
             end
 
             -- Environmental Check
-            if Settings.Fullbright.Status then Lighting.Brightness = 2; Lighting.Ambient = Color3.new(1,1,1); Lighting.GlobalShadows = false
-            elseif not Settings.NoFog.Status then Lighting.Brightness = getgenv().OriginalLighting.Brightness; Lighting.Ambient = getgenv().OriginalLighting.Ambient; Lighting.GlobalShadows = getgenv().OriginalLighting.GlobalShadows end
+            if Settings.Fullbright.Status then
+                Lighting.Brightness = 2; Lighting.Ambient = Color3.new(1,1,1); Lighting.GlobalShadows = false
+            elseif not Settings.NoFog.Status then
+                Lighting.Brightness = getgenv().OriginalLighting.Brightness
+                Lighting.Ambient = getgenv().OriginalLighting.Ambient
+                Lighting.GlobalShadows = getgenv().OriginalLighting.GlobalShadows
+            end
             Lighting.FogEnd = Settings.NoFog.Status and 1e5 or getgenv().OriginalLighting.FogEnd
 
             if hum and root then
-                -- FLY RE-ENGINEERED
+                -- FLY WITH FALLING STATE
                 if Settings.Fly.Status then
                     if not bv or bv.Parent ~= root then
                         if bv then bv:Destroy(); bg:Destroy() end
-                        bv = Instance.new("BodyVelocity", root); bv.MaxForce = Vector3.new(1e6,1e6,1e6); bg = Instance.new("BodyGyro", root); bg.MaxTorque = Vector3.new(1e6,1e6,1e6)
+                        bv = Instance.new("BodyVelocity", root); bv.MaxForce = Vector3.new(1e6,1e6,1e6)
+                        bg = Instance.new("BodyGyro", root); bg.MaxTorque = Vector3.new(1e6,1e6,1e6)
                     end
                     local fs = tonumber(fInp.Text) or 100
-                    local moveDir = (UserInputService:IsKeyDown("W") and cam.CFrame.LookVector or Vector3.new()) + (UserInputService:IsKeyDown("S") and -cam.CFrame.LookVector or Vector3.new()) + (UserInputService:IsKeyDown("A") and -cam.CFrame.RightVector or Vector3.new()) + (UserInputService:IsKeyDown("D") and cam.CFrame.RightVector or Vector3.new())
+                    local moveDir = (UserInputService:IsKeyDown("W") and cam.CFrame.LookVector or Vector3.new()) +
+                                    (UserInputService:IsKeyDown("S") and -cam.CFrame.LookVector or Vector3.new()) +
+                                    (UserInputService:IsKeyDown("A") and -cam.CFrame.RightVector or Vector3.new()) +
+                                    (UserInputService:IsKeyDown("D") and cam.CFrame.RightVector or Vector3.new())
                     local vert = UserInputService:IsKeyDown("Space") and 0.25 or (UserInputService:IsKeyDown("LeftShift") and -0.25 or 0)
-                    bv.Velocity = (moveDir * fs) + Vector3.new(0, vert * fs, 0); bg.CFrame = cam.CFrame; hum.PlatformStand = true
+                    bv.Velocity = (moveDir * fs) + Vector3.new(0, vert * fs, 0)
+                    bg.CFrame = cam.CFrame
+                    hum.PlatformStand = true
+                    hum:ChangeState(Enum.HumanoidStateType.Freefall) -- FORCE FALLING ANIMATION
                 elseif bv then
                     bv:Destroy(); bg:Destroy(); bv = nil; hum.PlatformStand = false
                 end
@@ -197,20 +233,29 @@ task.spawn(function()
                 if Settings.Speed.Bind and UserInputService:IsKeyDown(Settings.Speed.Bind) then hum.WalkSpeed = tonumber(sInp.Text) or 100 else hum.WalkSpeed = 16 end
                 if Settings.InfJump.Status and UserInputService:IsKeyDown(Enum.KeyCode.Space) then root.Velocity = Vector3.new(root.Velocity.X, tonumber(jInp.Text) or 50, root.Velocity.Z) end
                 
-                FOV.Radius = tonumber(aInp.Text) or 100; FOV.Position = UserInputService:GetMouseLocation()
+                FOV.Radius = tonumber(aInp.Text) or 100
+                FOV.Position = UserInputService:GetMouseLocation()
                 if Settings.Aimlock.Status and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
                     if not LockedTarget or not LockedTarget.Parent or LockedTarget.Parent.Humanoid.Health <= 0 then
                         local target, dist = nil, FOV.Radius
                         for _, v in pairs(Players:GetPlayers()) do
                             if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") then
                                 local pos, vis = cam:WorldToViewportPoint(v.Character.Head.Position)
-                                local mag = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                                local mag = (Vector2.new(pos.X,pos.Y) - UserInputService:GetMouseLocation()).Magnitude
                                 if vis and mag < dist then dist = mag; target = v.Character.Head end
                             end
-                        end; LockedTarget = target
+                        end
+                        LockedTarget = target
                     end
                     if LockedTarget then cam.CFrame = CFrame.new(cam.CFrame.Position, LockedTarget.Position) end
                 else LockedTarget = nil end
+
+                -- NOCLIP
+                if Settings.Noclip.Status then
+                    for _, part in pairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then part.CanCollide = false end
+                    end
+                end
             end
 
             -- ESP
