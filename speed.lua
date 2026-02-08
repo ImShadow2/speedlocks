@@ -2,16 +2,24 @@ local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 
 local GUI_NAME = "CleanUnifiedMenu"
 local LP = Players.LocalPlayer
 
+-- ==========================================
+-- 1. SAFE EXECUTION
+-- ==========================================
 local function Cleanup()
     local existing = CoreGui:FindFirstChild(GUI_NAME) or LP:WaitForChild("PlayerGui"):FindFirstChild(GUI_NAME)
     if existing then existing:Destroy() end
 end
 Cleanup()
 
+-- ==========================================
+-- 2. UI INITIALIZATION
+-- ==========================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = GUI_NAME
 screenGui.ResetOnSpawn = false
@@ -19,7 +27,7 @@ pcall(function() screenGui.Parent = CoreGui end)
 if not screenGui.Parent then screenGui.Parent = LP.PlayerGui end
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 420, 0, 220)
+mainFrame.Size = UDim2.new(0, 420, 0, 330)
 mainFrame.Position = UDim2.new(0.5, -210, 0.1, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 mainFrame.BorderSizePixel = 1
@@ -55,19 +63,22 @@ local function CreateRow(text, yPos)
     return row
 end
 
-local speedRow = CreateRow("Speed", 40)
+-- ==========================================
+-- 3. INTERFACE ROWS
+-- ==========================================
+local speedRow = CreateRow("👟 Speed", 40)
 local speedInput = Instance.new("TextBox", speedRow); speedInput.Size = UDim2.new(0, 50, 0, 25); speedInput.Position = UDim2.new(0, 100, 0, 2); speedInput.Text = "100"; speedInput.BackgroundColor3 = Color3.fromRGB(40,40,40); speedInput.TextColor3 = Color3.fromRGB(0,255,0)
 local speedBindBtn = Instance.new("TextButton", speedRow); speedBindBtn.Size = UDim2.new(0, 80, 0, 25); speedBindBtn.Position = UDim2.new(0, 155, 0, 2); speedBindBtn.Text = "[ Bind ]"; speedBindBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); speedBindBtn.TextColor3 = Color3.fromRGB(255,255,255)
 local speedStateBtn = Instance.new("TextButton", speedRow); speedStateBtn.Size = UDim2.new(1, -240, 0, 25); speedStateBtn.Position = UDim2.new(0, 240, 0, 2); speedStateBtn.Text = "State: Hold"; speedStateBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); speedStateBtn.TextColor3 = Color3.fromRGB(255,255,255)
 
-local jumpRow = CreateRow("Inf Jump", 75)
+local jumpRow = CreateRow("🦘 Inf Jump", 75)
 local jumpToggleBtn = Instance.new("TextButton", jumpRow); jumpToggleBtn.Size = UDim2.new(1, -100, 0, 25); jumpToggleBtn.Position = UDim2.new(0, 100, 0, 2); jumpToggleBtn.Text = "Off"; jumpToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); jumpToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
 
-local noclipRow = CreateRow("No Clip", 110)
+local noclipRow = CreateRow("🧱 No Clip", 110)
 local noclipBindBtn = Instance.new("TextButton", noclipRow); noclipBindBtn.Size = UDim2.new(0, 80, 0, 25); noclipBindBtn.Position = UDim2.new(0, 100, 0, 2); noclipBindBtn.Text = "[ V ]"; noclipBindBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); noclipBindBtn.TextColor3 = Color3.fromRGB(255,255,255)
 local noclipStateBtn = Instance.new("TextButton", noclipRow); noclipStateBtn.Size = UDim2.new(1, -185, 0, 25); noclipStateBtn.Position = UDim2.new(0, 185, 0, 2); noclipStateBtn.Text = "Off"; noclipStateBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); noclipStateBtn.TextColor3 = Color3.fromRGB(255,255,255)
 
-local flyRow = CreateRow("Fly", 145)
+local flyRow = CreateRow("🦅 Fly", 145)
 local flyInput = Instance.new("TextBox", flyRow); flyInput.Size = UDim2.new(0, 50, 0, 25); flyInput.Position = UDim2.new(0, 100, 0, 2); flyInput.Text = "100"; flyInput.BackgroundColor3 = Color3.fromRGB(40,40,40); flyInput.TextColor3 = Color3.fromRGB(0,255,0)
 local flyBindBtn = Instance.new("TextButton", flyRow); flyBindBtn.Size = UDim2.new(0, 80, 0, 25); flyBindBtn.Position = UDim2.new(0, 155, 0, 2); flyBindBtn.Text = "[ Bind ]"; flyBindBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); flyBindBtn.TextColor3 = Color3.fromRGB(255,255,255)
 local flyToggleBtn = Instance.new("TextButton", flyRow); flyToggleBtn.Size = UDim2.new(1, -240, 0, 25); flyToggleBtn.Position = UDim2.new(0, 240, 0, 2); flyToggleBtn.Text = "Off"; flyToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); flyToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
@@ -75,12 +86,82 @@ local flyToggleBtn = Instance.new("TextButton", flyRow); flyToggleBtn.Size = UDi
 local hideRow = CreateRow("Hide GUI", 180)
 local hideBindBtn = Instance.new("TextButton", hideRow); hideBindBtn.Size = UDim2.new(1, -100, 0, 25); hideBindBtn.Position = UDim2.new(0, 100, 0, 2); hideBindBtn.Text = "[ Insert ]"; hideBindBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40); hideBindBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 
+local fbRow = CreateRow("👁️ Fullbright", 215)
+local fbToggleBtn = Instance.new("TextButton", fbRow); fbToggleBtn.Size = UDim2.new(1, -100, 0, 25); fbToggleBtn.Position = UDim2.new(0, 100, 0, 2); fbToggleBtn.Text = "Off"; fbToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); fbToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+
+local fogRow = CreateRow("🔭 No Fog", 250)
+local fogToggleBtn = Instance.new("TextButton", fogRow); fogToggleBtn.Size = UDim2.new(1, -100, 0, 25); fogToggleBtn.Position = UDim2.new(0, 100, 0, 2); fogToggleBtn.Text = "Off"; fogToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); fogToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+
+local interactRow = CreateRow("⏩ Fast Interact", 285)
+local interactToggleBtn = Instance.new("TextButton", interactRow); interactToggleBtn.Size = UDim2.new(1, -100, 0, 25); interactToggleBtn.Position = UDim2.new(0, 100, 0, 2); interactToggleBtn.Text = "Off"; interactToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); interactToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+
+-- ==========================================
+-- 4. LOGIC & RESTORE STATE
+-- ==========================================
 local Binds = { Speed = nil, Noclip = Enum.KeyCode.V, Fly = nil, Hide = Enum.KeyCode.Insert }
 local Waiting = { Speed = false, Noclip = false, Fly = false, Hide = false }
-local Active = { Speed = false, Jump = false, Noclip = false, Fly = false, Visible = true }
+local Active = { Speed = false, Jump = false, Noclip = false, Fly = false, Visible = true, Fullbright = false, NoFog = false, FastInteract = false }
 local SpeedMode = "Hold"
+local originalHold = {}
 local bv, bg
 
+-- Lighting Defaults Storage
+local OrigLighting = {
+    Brightness = Lighting.Brightness,
+    ClockTime = Lighting.ClockTime,
+    FogEnd = Lighting.FogEnd,
+    GlobalShadows = Lighting.GlobalShadows,
+    Ambient = Lighting.Ambient
+}
+
+-- Fast Interact Logic
+local function ApplyInteract(prompt)
+    if not prompt:IsA("ProximityPrompt") then return end
+    if Active.FastInteract then
+        if originalHold[prompt] == nil then originalHold[prompt] = prompt.HoldDuration end
+        prompt.HoldDuration = 0.0001
+    else
+        if originalHold[prompt] ~= nil then prompt.HoldDuration = originalHold[prompt] end
+    end
+end
+
+workspace.DescendantAdded:Connect(function(v)
+    task.wait()
+    ApplyInteract(v)
+end)
+
+-- Continuous Lighting Override Loop
+RunService.RenderStepped:Connect(function()
+    if Active.Fullbright then
+         Lighting.Brightness = 2
+         Lighting.ClockTime = 14
+         Lighting.FogEnd = 100000
+         Lighting.GlobalShadows = false
+         Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+    end
+    if Active.NoFog and not Active.Fullbright then
+        Lighting.FogEnd = 100000
+    end
+end)
+
+-- Revert Functions
+local function RevertLighting()
+    Lighting.Brightness = OrigLighting.Brightness
+    Lighting.ClockTime = OrigLighting.ClockTime
+    Lighting.FogEnd = OrigLighting.FogEnd
+    Lighting.GlobalShadows = OrigLighting.GlobalShadows
+    Lighting.Ambient = OrigLighting.Ambient
+end
+
+local function RevertFog()
+    if not Active.Fullbright then -- Fullbright controls fog too, so check if FB is still on
+        Lighting.FogEnd = OrigLighting.FogEnd
+    end
+end
+
+-- ==========================================
+-- 5. INTERACTION LOGIC
+-- ==========================================
 local function GetInputObject(input) return (input.UserInputType == Enum.UserInputType.Keyboard) and input.KeyCode or input.UserInputType end
 local function GetInputName(input) local obj = GetInputObject(input) return (input.UserInputType == Enum.UserInputType.Keyboard) and obj.Name or input.UserInputType.Name end
 
@@ -145,6 +226,28 @@ task.spawn(function()
         local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
         if hum then hum.WalkSpeed = Active.Speed and (tonumber(speedInput.Text) or 16) or 16 end
     end
+end)
+
+-- Button Toggles
+fbToggleBtn.MouseButton1Click:Connect(function() 
+    Active.Fullbright = not Active.Fullbright
+    fbToggleBtn.Text = Active.Fullbright and "On" or "Off"
+    fbToggleBtn.BackgroundColor3 = Active.Fullbright and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    if not Active.Fullbright then RevertLighting() end
+end)
+
+fogToggleBtn.MouseButton1Click:Connect(function() 
+    Active.NoFog = not Active.NoFog
+    fogToggleBtn.Text = Active.NoFog and "On" or "Off"
+    fogToggleBtn.BackgroundColor3 = Active.NoFog and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    if not Active.NoFog then RevertFog() end
+end)
+
+interactToggleBtn.MouseButton1Click:Connect(function() 
+    Active.FastInteract = not Active.FastInteract
+    interactToggleBtn.Text = Active.FastInteract and "On" or "Off"
+    interactToggleBtn.BackgroundColor3 = Active.FastInteract and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
+    for _, v in ipairs(workspace:GetDescendants()) do ApplyInteract(v) end
 end)
 
 speedBindBtn.MouseButton1Click:Connect(function() Waiting.Speed = true; speedBindBtn.Text = "..." end)
