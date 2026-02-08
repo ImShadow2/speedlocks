@@ -1,266 +1,230 @@
+-- 1. NUCLEAR SYMMETRICAL CLEANUP & FAIL-SAFE EXECUTION
 local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local Lighting = game:GetService("Lighting")
-local ProximityPromptService = game:GetService("ProximityPromptService")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
 
-local GUI_NAME = "CleanUnifiedMenu"
-local LP = Players.LocalPlayer
+local TAG = "Matrix_V34_Stable"
 
--- ==========================================
--- 1. SAFE EXECUTION
--- ==========================================
-local function Cleanup()
-    local existing = CoreGui:FindFirstChild(GUI_NAME) or LP:WaitForChild("PlayerGui"):FindFirstChild(GUI_NAME)
-    if existing then existing:Destroy() end
+-- Initial Setup for Reverting
+if not getgenv().OriginalLighting then
+    getgenv().OriginalLighting = {
+        Brightness = Lighting.Brightness,
+        ClockTime = Lighting.ClockTime,
+        FogEnd = Lighting.FogEnd,
+        GlobalShadows = Lighting.GlobalShadows,
+        Ambient = Lighting.Ambient
+    }
 end
-Cleanup()
+getgenv().OriginalDurations = getgenv().OriginalDurations or {}
 
--- ==========================================
--- 2. UI INITIALIZATION (WIDER FRAME)
--- ==========================================
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = GUI_NAME
-screenGui.ResetOnSpawn = false
-pcall(function() screenGui.Parent = CoreGui end)
-if not screenGui.Parent then screenGui.Parent = LP.PlayerGui end
+local function WipeAll()
+    _G.KillMenu = true 
+    pcall(function()
+        -- Reset Lighting
+        local orig = getgenv().OriginalLighting
+        Lighting.Brightness = orig.Brightness
+        Lighting.ClockTime = orig.ClockTime
+        Lighting.FogEnd = orig.FogEnd
+        Lighting.GlobalShadows = orig.GlobalShadows
+        Lighting.Ambient = orig.Ambient
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 500, 0, 330) -- WIDENED TO 500
-mainFrame.Position = UDim2.new(0.5, -250, 0.1, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-mainFrame.BorderSizePixel = 1
-mainFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = screenGui
+        -- Reset Prompts
+        for prompt, duration in pairs(getgenv().OriginalDurations) do
+            if prompt and prompt.Parent then prompt.HoldDuration = duration end
+        end
+        getgenv().OriginalDurations = {}
 
-local title = Instance.new("TextLabel", mainFrame)
-title.Size = UDim2.new(1, -30, 0, 30); title.Position = UDim2.new(0, 10, 0, 0)
-title.BackgroundTransparency = 1; title.Text = "Advanced Cheat Menu"; title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.TextXAlignment = Enum.TextXAlignment.Left; title.Font = Enum.Font.Code; title.TextSize = 16
+        -- Kill FOV Drawing
+        if getgenv().FOVCircle then
+            getgenv().FOVCircle.Visible = false
+            getgenv().FOVCircle:Destroy()
+            getgenv().FOVCircle = nil
+        end
+        
+        -- Remove GUIs
+        for _, v in pairs(CoreGui:GetChildren()) do
+            if v.Name:find("Matrix") then v:Destroy() end
+        end
 
-local terminateBtn = Instance.new("TextButton", mainFrame)
-terminateBtn.Size = UDim2.new(0, 30, 0, 30); terminateBtn.Position = UDim2.new(1, -30, 0, 0)
-terminateBtn.BackgroundTransparency = 1; terminateBtn.Text = "x"; terminateBtn.TextColor3 = Color3.fromRGB(255, 50, 50)
-terminateBtn.TextSize = 20
-
-local function CreateRow(text, yPos)
-    local row = Instance.new("Frame", mainFrame)
-    row.Size = UDim2.new(1, -20, 0, 30); row.Position = UDim2.new(0, 10, 0, yPos)
-    row.BackgroundTransparency = 1
-    
-    local label = Instance.new("TextLabel", row)
-    label.Size = UDim2.new(0, 140, 1, 0) -- INCREASED LABEL WIDTH FOR LONG NAMES
-    label.Text = "" .. text .. ""
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.BackgroundTransparency = 1
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Font = Enum.Font.Code
-    label.TextSize = 14
-    
-    return row
+        -- Physics Reset
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.PlatformStand = false; hum.WalkSpeed = 16 end
+            for _, v in pairs(char:GetDescendants()) do
+                if v:IsA("BodyVelocity") or v:IsA("BodyGyro") then v:Destroy() end
+            end
+        end
+    end)
 end
 
--- ==========================================
--- 3. INTERFACE ROWS (ADJUSTED FOR WIDTH)
--- ==========================================
-local speedRow = CreateRow("👟 Speed", 40)
-local speedInput = Instance.new("TextBox", speedRow); speedInput.Size = UDim2.new(0, 50, 0, 25); speedInput.Position = UDim2.new(0, 150, 0, 2); speedInput.Text = "100"; speedInput.BackgroundColor3 = Color3.fromRGB(40,40,40); speedInput.TextColor3 = Color3.fromRGB(0,255,0)
-local speedBindBtn = Instance.new("TextButton", speedRow); speedBindBtn.Size = UDim2.new(0, 80, 0, 25); speedBindBtn.Position = UDim2.new(0, 205, 0, 2); speedBindBtn.Text = "[ Bind ]"; speedBindBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); speedBindBtn.TextColor3 = Color3.fromRGB(255,255,255)
-local speedStateBtn = Instance.new("TextButton", speedRow); speedStateBtn.Size = UDim2.new(1, -290, 0, 25); speedStateBtn.Position = UDim2.new(0, 290, 0, 2); speedStateBtn.Text = "State: Hold"; speedStateBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); speedStateBtn.TextColor3 = Color3.fromRGB(255,255,255)
+WipeAll()
+task.wait(0.3)
+_G.KillMenu = false
 
-local jumpRow = CreateRow("🦘 Inf Jump", 75)
-local jumpToggleBtn = Instance.new("TextButton", jumpRow); jumpToggleBtn.Size = UDim2.new(1, -150, 0, 25); jumpToggleBtn.Position = UDim2.new(0, 150, 0, 2); jumpToggleBtn.Text = "Off"; jumpToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); jumpToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+-- 2. DRAWING API
+local FOV = Drawing.new("Circle")
+FOV.Thickness = 1.5; FOV.Color = Color3.new(1, 1, 1); FOV.Transparency = 1; FOV.Filled = false; FOV.Visible = false
+getgenv().FOVCircle = FOV
 
-local noclipRow = CreateRow("🧱 No Clip", 110)
-local noclipBindBtn = Instance.new("TextButton", noclipRow); noclipBindBtn.Size = UDim2.new(0, 80, 0, 25); noclipBindBtn.Position = UDim2.new(0, 150, 0, 2); noclipBindBtn.Text = "[ V ]"; noclipBindBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); noclipBindBtn.TextColor3 = Color3.fromRGB(255,255,255)
-local noclipStateBtn = Instance.new("TextButton", noclipRow); noclipStateBtn.Size = UDim2.new(1, -235, 0, 25); noclipStateBtn.Position = UDim2.new(0, 235, 0, 2); noclipStateBtn.Text = "Off"; noclipStateBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); noclipStateBtn.TextColor3 = Color3.fromRGB(255,255,255)
-
-local flyRow = CreateRow("🦅 Fly", 145)
-local flyInput = Instance.new("TextBox", flyRow); flyInput.Size = UDim2.new(0, 50, 0, 25); flyInput.Position = UDim2.new(0, 150, 0, 2); flyInput.Text = "100"; flyInput.BackgroundColor3 = Color3.fromRGB(40,40,40); flyInput.TextColor3 = Color3.fromRGB(0,255,0)
-local flyBindBtn = Instance.new("TextButton", flyRow); flyBindBtn.Size = UDim2.new(0, 80, 0, 25); flyBindBtn.Position = UDim2.new(0, 205, 0, 2); flyBindBtn.Text = "[ Bind ]"; flyBindBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); flyBindBtn.TextColor3 = Color3.fromRGB(255,255,255)
-local flyToggleBtn = Instance.new("TextButton", flyRow); flyToggleBtn.Size = UDim2.new(1, -290, 0, 25); flyToggleBtn.Position = UDim2.new(0, 290, 0, 2); flyToggleBtn.Text = "Off"; flyToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); flyToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-
-local hideRow = CreateRow("🚫 Hide Interface", 180)
-local hideBindBtn = Instance.new("TextButton", hideRow); hideBindBtn.Size = UDim2.new(1, -150, 0, 25); hideBindBtn.Position = UDim2.new(0, 150, 0, 2); hideBindBtn.Text = "[ Insert ]"; hideBindBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40); hideBindBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-
-local fbRow = CreateRow("👁️ Fullbright ", 215)
-local fbToggleBtn = Instance.new("TextButton", fbRow); fbToggleBtn.Size = UDim2.new(1, -150, 0, 25); fbToggleBtn.Position = UDim2.new(0, 150, 0, 2); fbToggleBtn.Text = "Off"; fbToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); fbToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-
-local fogRow = CreateRow("🔭 No Fog", 250)
-local fogToggleBtn = Instance.new("TextButton", fogRow); fogToggleBtn.Size = UDim2.new(1, -150, 0, 25); fogToggleBtn.Position = UDim2.new(0, 150, 0, 2); fogToggleBtn.Text = "Off"; fogToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); fogToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-
-local interactRow = CreateRow("⏩ Fast Interact", 285)
-local interactToggleBtn = Instance.new("TextButton", interactRow); interactToggleBtn.Size = UDim2.new(1, -150, 0, 25); interactToggleBtn.Position = UDim2.new(0, 150, 0, 2); interactToggleBtn.Text = "Off"; interactToggleBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); interactToggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
-
--- ==========================================
--- 4. LOGIC & STATE
--- ==========================================
-local Binds = { Speed = nil, Noclip = Enum.KeyCode.V, Fly = nil, Hide = Enum.KeyCode.Insert }
-local Waiting = { Speed = false, Noclip = false, Fly = false, Hide = false }
-local Active = { Speed = false, Jump = false, Noclip = false, Fly = false, Visible = true, Fullbright = false, NoFog = false, FastInteract = false }
-local SpeedMode = "Hold"
-local originalHold = {}
+-- 3. SETTINGS
+local LockedTarget = nil
 local bv, bg
-
-local OrigLighting = {
-    Brightness = Lighting.Brightness,
-    ClockTime = Lighting.ClockTime,
-    FogEnd = Lighting.FogEnd,
-    GlobalShadows = Lighting.GlobalShadows,
-    Ambient = Lighting.Ambient
+local Settings = {
+    Speed = {Bind = nil, Value = 100},
+    InfJump = {Status = false, Power = 50},
+    Fly = {Status = false, Bind = nil, Speed = 100},
+    ESP = {Status = false},
+    Aimlock = {Status = false, FOVSize = 100},
+    Fullbright = {Status = false},
+    NoFog = {Status = false},
+    FastInteract = {Status = false},
+    HideGui = {Bind = Enum.KeyCode.Insert, Status = true}
 }
 
--- Fast Interact Logic
-local function ApplyInteract(prompt)
+-- 4. GUI CONSTRUCTION
+local ScreenGui = Instance.new("ScreenGui", CoreGui); ScreenGui.Name = TAG
+local Outer = Instance.new("Frame", ScreenGui)
+Outer.Size = UDim2.new(0, 360, 0, 440); Outer.Position = UDim2.new(0.5, -180, 0.3, 0)
+Outer.BackgroundColor3 = Color3.new(1, 1, 1); Outer.BorderSizePixel = 0; Outer.Active = true; Outer.Draggable = true; Instance.new("UICorner", Outer)
+
+local Main = Instance.new("Frame", Outer)
+Main.Size = UDim2.new(1, -4, 1, -6); Main.Position = UDim2.new(0, 2, 0, 3)
+Main.BackgroundColor3 = Color3.new(0, 0, 0); Instance.new("UICorner", Main)
+
+local Title = Instance.new("TextLabel", Main)
+Title.Size = UDim2.new(1, -40, 0, 45); Title.Position = UDim2.new(0, 15, 0, 0); Title.BackgroundTransparency = 1
+Title.Text = "MENU"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 16; Title.TextXAlignment = 0
+
+local Close = Instance.new("TextButton", Main)
+Close.Size = UDim2.new(0, 24, 0, 24); Close.Position = UDim2.new(1, -32, 0, 10); Close.BackgroundColor3 = Color3.fromRGB(60, 0, 0); Close.Text = "X"; Close.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", Close); Close.MouseButton1Click:Connect(WipeAll)
+
+local function NewRow(text, y)
+    local r = Instance.new("Frame", Main); r.Size = UDim2.new(1, -30, 0, 35); r.Position = UDim2.new(0, 15, 0, y); r.BackgroundTransparency = 1
+    local l = Instance.new("TextLabel", r); l.Size = UDim2.new(0, 110, 1, 0); l.Text = text .. "    "; l.TextColor3 = Color3.new(1, 1, 1); l.Font = Enum.Font.GothamSemibold; l.BackgroundTransparency = 1; l.TextSize = 13; l.TextXAlignment = 0
+    local c = Instance.new("Frame", r); c.Size = UDim2.new(1, -115, 1, 0); c.Position = UDim2.new(0, 115, 0, 0); c.BackgroundTransparency = 1
+    local lay = Instance.new("UIListLayout", c); lay.FillDirection = 0; lay.HorizontalAlignment = 1; lay.VerticalAlignment = 1; lay.Padding = UDim.new(0, 8)
+    return c
+end
+
+-- DATA ROWS
+local c1 = NewRow("👟 Speed", 55); local sInp = Instance.new("TextBox", c1); sInp.Size = UDim2.new(0.3, 0, 1, 0); sInp.Text = "100"; local sBnd = Instance.new("TextButton", c1); sBnd.Size = UDim2.new(0.7, -8, 1, 0); sBnd.Text = "[ Bind ]"
+local c2 = NewRow("🦘 Inf Jump", 95); local jInp = Instance.new("TextBox", c2); jInp.Size = UDim2.new(0.3, 0, 1, 0); jInp.Text = "50"; local jTgl = Instance.new("TextButton", c2); jTgl.Size = UDim2.new(0.7, -8, 1, 0); jTgl.Text = "Off"
+local c3 = NewRow("🦅 Fly", 135); local fInp = Instance.new("TextBox", c3); fInp.Size = UDim2.new(0.3, 0, 1, 0); fInp.Text = "100"; local fBnd = Instance.new("TextButton", c3); fBnd.Size = UDim2.new(0.7, -8, 1, 0); fBnd.Text = "[ Bind ]"
+local c4 = NewRow("👀 ESP", 175); local eTgl = Instance.new("TextButton", c4); eTgl.Size = UDim2.new(1, 0, 1, 0); eTgl.Text = "Off"
+local c5 = NewRow("🎯 Aimlock", 215); local aInp = Instance.new("TextBox", c5); aInp.Size = UDim2.new(0.3, 0, 1, 0); aInp.Text = "100"; local aTgl = Instance.new("TextButton", c5); aTgl.Size = UDim2.new(0.7, -8, 1, 0); aTgl.Text = "Off"
+local c6 = NewRow("🔦 Fullbright", 255); local bTgl = Instance.new("TextButton", c6); bTgl.Size = UDim2.new(1, 0, 1, 0); bTgl.Text = "Off"
+local c7 = NewRow("🔭 No Fog", 295); local nTgl = Instance.new("TextButton", c7); nTgl.Size = UDim2.new(1, 0, 1, 0); nTgl.Text = "Off"
+local c8 = NewRow("⏩ Fast Interact", 335); local iTgl = Instance.new("TextButton", c8); iTgl.Size = UDim2.new(1, 0, 1, 0); iTgl.Text = "Off"
+local c9 = NewRow("🚫 Hide GUI", 375); local hBnd = Instance.new("TextButton", c9); hBnd.Size = UDim2.new(1, 0, 1, 0); hBnd.Text = "[ Insert ]"
+
+for _, v in pairs(Main:GetDescendants()) do if v:IsA("TextBox") or v:IsA("TextButton") then if v ~= Close then v.BackgroundColor3 = Color3.fromRGB(30, 30, 30); v.TextColor3 = Color3.new(1,1,1); v.Font = Enum.Font.Gotham; v.TextSize = 11; Instance.new("UICorner", v) end end end
+
+-- 5. FUNCTIONALITY
+local function SetStatus(btn, stat, isAim)
+    btn.Text = stat and (isAim and "On (RMB)" or "On") or (isAim and "Off (RMB)" or "Off")
+    btn.TextColor3 = stat and Color3.new(0, 1, 0.5) or Color3.new(1, 0.3, 0.3)
+end
+
+local function SetupPrompt(prompt)
     if not prompt:IsA("ProximityPrompt") then return end
-    if Active.FastInteract then
-        if originalHold[prompt] == nil then originalHold[prompt] = prompt.HoldDuration end
-        prompt.HoldDuration = 0.0001
-    else
-        if originalHold[prompt] ~= nil then prompt.HoldDuration = originalHold[prompt] end
-    end
+    if not getgenv().OriginalDurations[prompt] then getgenv().OriginalDurations[prompt] = prompt.HoldDuration end
+    if Settings.FastInteract.Status then prompt.HoldDuration = 0.0001 end
 end
 
-workspace.DescendantAdded:Connect(function(v)
-    task.wait()
-    ApplyInteract(v)
-end)
+Workspace.DescendantAdded:Connect(SetupPrompt)
 
--- Lighting Toggle Logic
-local function UpdateLighting()
-    if Active.Fullbright then
-        Lighting.Brightness = 2
-        Lighting.ClockTime = 14
-        Lighting.FogEnd = 100000
-        Lighting.GlobalShadows = false
-        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-    elseif Active.NoFog then
-        Lighting.FogEnd = 100000
-    else
-        Lighting.Brightness = OrigLighting.Brightness
-        Lighting.ClockTime = OrigLighting.ClockTime
-        Lighting.FogEnd = OrigLighting.FogEnd
-        Lighting.GlobalShadows = OrigLighting.GlobalShadows
-        Lighting.Ambient = OrigLighting.Ambient
-    end
-end
-
-local function GetInputObject(input) return (input.UserInputType == Enum.UserInputType.Keyboard) and input.KeyCode or input.UserInputType end
-local function GetInputName(input) local obj = GetInputObject(input) return (input.UserInputType == Enum.UserInputType.Keyboard) and obj.Name or input.UserInputType.Name end
-
-local function ToggleFly()
-    Active.Fly = not Active.Fly
-    flyToggleBtn.Text = Active.Fly and "On" or "Off"
-    flyToggleBtn.BackgroundColor3 = Active.Fly and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-    if Active.Fly and root then
-        bv = Instance.new("BodyVelocity", root); bv.MaxForce = Vector3.new(1e5, 1e5, 1e5); bv.Velocity = Vector3.new(0,0,0)
-        bg = Instance.new("BodyGyro", root); bg.MaxTorque = Vector3.new(1e5, 1e5, 1e5); bg.CFrame = root.CFrame
-    else
-        if bv then bv:Destroy() end if bg then bg:Destroy() end
-    end
-end
-
--- ==========================================
--- 5. RUN LOOPS
--- ==========================================
-RunService.RenderStepped:Connect(function()
-    if Active.Fly then
-        local root = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-        local cam = workspace.CurrentCamera
-        if root and bv and bg then
-            local speedValue = tonumber(flyInput.Text) or 100
-            local verticalSpeed = speedValue * 0.25
-            
-            local dir = Vector3.new(0,0,0)
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
-            
-            local yDir = 0
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then yDir = yDir + verticalSpeed end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then yDir = yDir - verticalSpeed end
-            
-            bv.Velocity = (dir * speedValue) + Vector3.new(0, yDir, 0)
-            bg.CFrame = cam.CFrame
-        end
-    end
-    if Active.Fullbright or Active.NoFog then UpdateLighting() end
-end)
-
-RunService.Stepped:Connect(function()
-    if Active.Noclip and LP.Character then
-        for _, v in pairs(LP.Character:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
-    end
-end)
-
-task.spawn(function()
-    while task.wait() do
-        if not screenGui.Parent then break end
-        speedStateBtn.BackgroundColor3 = Active.Speed and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-        local hum = LP.Character and LP.Character:FindFirstChild("Humanoid")
-        if hum then hum.WalkSpeed = Active.Speed and (tonumber(speedInput.Text) or 16) or 16 end
-    end
-end)
-
--- ==========================================
--- 6. EVENT LISTENERS
--- ==========================================
+-- KEYBIND SYSTEM
 UserInputService.InputBegan:Connect(function(input, gpe)
-    local obj = GetInputObject(input)
-    if Waiting.Speed then Binds.Speed = obj; speedBindBtn.Text = "["..GetInputName(input).."]"; Waiting.Speed = false return end
-    if Waiting.Noclip then Binds.Noclip = obj; noclipBindBtn.Text = "["..GetInputName(input).."]"; Waiting.Noclip = false return end
-    if Waiting.Fly then Binds.Fly = obj; flyBindBtn.Text = "["..GetInputName(input).."]"; Waiting.Fly = false return end
-    if Waiting.Hide then Binds.Hide = obj; hideBindBtn.Text = "["..GetInputName(input).."]"; Waiting.Hide = false return end
-
     if gpe then return end
-    if Binds.Speed and obj == Binds.Speed then if SpeedMode == "Toggle" then Active.Speed = not Active.Speed else Active.Speed = true end end
-    if Binds.Noclip and obj == Binds.Noclip then Active.Noclip = not Active.Noclip; noclipStateBtn.Text = Active.Noclip and "On" or "Off"; noclipStateBtn.BackgroundColor3 = Active.Noclip and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0) end
-    if Binds.Fly and obj == Binds.Fly then ToggleFly() end
-    if Binds.Hide and obj == Binds.Hide then Active.Visible = not Active.Visible; mainFrame.Visible = Active.Visible end
+    if Settings.Fly.Bind and (input.KeyCode == Settings.Fly.Bind or input.UserInputType == Settings.Fly.Bind) then
+        Settings.Fly.Status = not Settings.Fly.Status; SetStatus(fBnd, Settings.Fly.Status)
+    end
+    if input.KeyCode == Settings.HideGui.Bind then
+        Settings.HideGui.Status = not Settings.HideGui.Status; Outer.Visible = Settings.HideGui.Status
+    end
 end)
 
-UserInputService.InputEnded:Connect(function(input)
-    local obj = GetInputObject(input)
-    if Binds.Speed and obj == Binds.Speed and SpeedMode == "Hold" then Active.Speed = false end
-end)
+-- CLICK LISTENERS
+fBnd.MouseButton1Click:Connect(function() fBnd.Text = "..."; local i = UserInputService.InputBegan:Wait(); Settings.Fly.Bind = (i.KeyCode ~= Enum.KeyCode.Unknown and i.KeyCode or i.UserInputType); fBnd.Text = "[ " .. Settings.Fly.Bind.Name:gsub("MouseButton","MB") .. " ]" end)
+sBnd.MouseButton1Click:Connect(function() sBnd.Text = "..."; local i = UserInputService.InputBegan:Wait(); Settings.Speed.Bind = (i.KeyCode ~= Enum.KeyCode.Unknown and i.KeyCode or i.UserInputType); sBnd.Text = "[ " .. Settings.Speed.Bind.Name:gsub("MouseButton","MB") .. " ]" end)
+hBnd.MouseButton1Click:Connect(function() hBnd.Text = "..."; local i = UserInputService.InputBegan:Wait(); if i.KeyCode ~= Enum.KeyCode.Unknown then Settings.HideGui.Bind = i.KeyCode; hBnd.Text = "[ " .. i.KeyCode.Name .. " ]" end end)
+jTgl.MouseButton1Click:Connect(function() Settings.InfJump.Status = not Settings.InfJump.Status; SetStatus(jTgl, Settings.InfJump.Status) end)
+eTgl.MouseButton1Click:Connect(function() Settings.ESP.Status = not Settings.ESP.Status; SetStatus(eTgl, Settings.ESP.Status) end)
+aTgl.MouseButton1Click:Connect(function() Settings.Aimlock.Status = not Settings.Aimlock.Status; SetStatus(aTgl, Settings.Aimlock.Status, true); FOV.Visible = Settings.Aimlock.Status end)
+bTgl.MouseButton1Click:Connect(function() Settings.Fullbright.Status = not Settings.Fullbright.Status; SetStatus(bTgl, Settings.Fullbright.Status) end)
+nTgl.MouseButton1Click:Connect(function() Settings.NoFog.Status = not Settings.NoFog.Status; SetStatus(nTgl, Settings.NoFog.Status) end)
+iTgl.MouseButton1Click:Connect(function() Settings.FastInteract.Status = not Settings.FastInteract.Status; SetStatus(iTgl, Settings.FastInteract.Status); for _,v in pairs(Workspace:GetDescendants()) do SetupPrompt(v) end end)
 
--- Button Binds
-fbToggleBtn.MouseButton1Click:Connect(function() 
-    Active.Fullbright = not Active.Fullbright
-    fbToggleBtn.Text = Active.Fullbright and "On" or "Off"
-    fbToggleBtn.BackgroundColor3 = Active.Fullbright and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    UpdateLighting()
-end)
+-- 6. FAIL-SAFE MASTER LOOP
+task.spawn(function()
+    while not _G.KillMenu do
+        pcall(function()
+            Outer.BackgroundColor3 = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+            local cam = Workspace.CurrentCamera; local char = LocalPlayer.Character; local hum = char and char:FindFirstChildOfClass("Humanoid"); local root = char and char:FindFirstChild("HumanoidRootPart")
 
-fogToggleBtn.MouseButton1Click:Connect(function() 
-    Active.NoFog = not Active.NoFog
-    fogToggleBtn.Text = Active.NoFog and "On" or "Off"
-    fogToggleBtn.BackgroundColor3 = Active.NoFog and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    UpdateLighting()
-end)
+            -- Fast Interact logic inside loop for reliability
+            if Settings.FastInteract.Status then
+                for prompt, _ in pairs(getgenv().OriginalDurations) do
+                    if prompt and prompt.Parent then prompt.HoldDuration = 0.0001 end
+                end
+            end
 
-interactToggleBtn.MouseButton1Click:Connect(function() 
-    Active.FastInteract = not Active.FastInteract
-    interactToggleBtn.Text = Active.FastInteract and "On" or "Off"
-    interactToggleBtn.BackgroundColor3 = Active.FastInteract and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0)
-    for _, v in ipairs(workspace:GetDescendants()) do ApplyInteract(v) end
-end)
+            -- Environmental Check
+            if Settings.Fullbright.Status then Lighting.Brightness = 2; Lighting.Ambient = Color3.new(1,1,1); Lighting.GlobalShadows = false
+            elseif not Settings.NoFog.Status then Lighting.Brightness = getgenv().OriginalLighting.Brightness; Lighting.Ambient = getgenv().OriginalLighting.Ambient; Lighting.GlobalShadows = getgenv().OriginalLighting.GlobalShadows end
+            Lighting.FogEnd = Settings.NoFog.Status and 1e5 or getgenv().OriginalLighting.FogEnd
 
-speedBindBtn.MouseButton1Click:Connect(function() Waiting.Speed = true; speedBindBtn.Text = "..." end)
-noclipBindBtn.MouseButton1Click:Connect(function() Waiting.Noclip = true; noclipBindBtn.Text = "..." end)
-flyBindBtn.MouseButton1Click:Connect(function() Waiting.Fly = true; flyBindBtn.Text = "..." end)
-hideBindBtn.MouseButton1Click:Connect(function() Waiting.Hide = true; hideBindBtn.Text = "..." end)
-speedStateBtn.MouseButton1Click:Connect(function() SpeedMode = (SpeedMode == "Hold") and "Toggle" or "Hold"; speedStateBtn.Text = "State: "..SpeedMode; Active.Speed = false end)
-jumpToggleBtn.MouseButton1Click:Connect(function() Active.Jump = not Active.Jump; jumpToggleBtn.Text = Active.Jump and "On" or "Off"; jumpToggleBtn.BackgroundColor3 = Active.Jump and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0) end)
-noclipStateBtn.MouseButton1Click:Connect(function() Active.Noclip = not Active.Noclip; noclipStateBtn.Text = Active.Noclip and "On" or "Off"; noclipStateBtn.BackgroundColor3 = Active.Noclip and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(150, 0, 0) end)
-flyToggleBtn.MouseButton1Click:Connect(ToggleFly)
-terminateBtn.MouseButton1Click:Connect(function() Cleanup() if LP.Character and LP.Character:FindFirstChild("Humanoid") then LP.Character.Humanoid.WalkSpeed = 16 end end)
+            if hum and root then
+                -- FLY RE-ENGINEERED
+                if Settings.Fly.Status then
+                    if not bv or bv.Parent ~= root then
+                        if bv then bv:Destroy(); bg:Destroy() end
+                        bv = Instance.new("BodyVelocity", root); bv.MaxForce = Vector3.new(1e6,1e6,1e6); bg = Instance.new("BodyGyro", root); bg.MaxTorque = Vector3.new(1e6,1e6,1e6)
+                    end
+                    local fs = tonumber(fInp.Text) or 100
+                    local moveDir = (UserInputService:IsKeyDown("W") and cam.CFrame.LookVector or Vector3.new()) + (UserInputService:IsKeyDown("S") and -cam.CFrame.LookVector or Vector3.new()) + (UserInputService:IsKeyDown("A") and -cam.CFrame.RightVector or Vector3.new()) + (UserInputService:IsKeyDown("D") and cam.CFrame.RightVector or Vector3.new())
+                    local vert = UserInputService:IsKeyDown("Space") and 0.25 or (UserInputService:IsKeyDown("LeftShift") and -0.25 or 0)
+                    bv.Velocity = (moveDir * fs) + Vector3.new(0, vert * fs, 0); bg.CFrame = cam.CFrame; hum.PlatformStand = true
+                elseif bv then
+                    bv:Destroy(); bg:Destroy(); bv = nil; hum.PlatformStand = false
+                end
 
-UserInputService.JumpRequest:Connect(function()
-    if Active.Jump then local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid") if hum then hum:ChangeState("Jumping") end end
+                -- Speed/Jump/Aimlock
+                if Settings.Speed.Bind and UserInputService:IsKeyDown(Settings.Speed.Bind) then hum.WalkSpeed = tonumber(sInp.Text) or 100 else hum.WalkSpeed = 16 end
+                if Settings.InfJump.Status and UserInputService:IsKeyDown(Enum.KeyCode.Space) then root.Velocity = Vector3.new(root.Velocity.X, tonumber(jInp.Text) or 50, root.Velocity.Z) end
+                
+                FOV.Radius = tonumber(aInp.Text) or 100; FOV.Position = UserInputService:GetMouseLocation()
+                if Settings.Aimlock.Status and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+                    if not LockedTarget or not LockedTarget.Parent or LockedTarget.Parent.Humanoid.Health <= 0 then
+                        local target, dist = nil, FOV.Radius
+                        for _, v in pairs(Players:GetPlayers()) do
+                            if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") then
+                                local pos, vis = cam:WorldToViewportPoint(v.Character.Head.Position)
+                                local mag = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                                if vis and mag < dist then dist = mag; target = v.Character.Head end
+                            end
+                        end; LockedTarget = target
+                    end
+                    if LockedTarget then cam.CFrame = CFrame.new(cam.CFrame.Position, LockedTarget.Position) end
+                else LockedTarget = nil end
+            end
+
+            -- ESP
+            if Settings.ESP.Status then
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character then
+                        local h = p.Character:FindFirstChild("ESPHighlight") or Instance.new("Highlight", p.Character)
+                        h.Name = "ESPHighlight"; h.FillTransparency = 0.5; h.FillColor = Color3.new(1,0,0)
+                    end
+                end
+            else
+                for _, p in pairs(Players:GetPlayers()) do if p.Character and p.Character:FindFirstChild("ESPHighlight") then p.Character.ESPHighlight:Destroy() end end
+            end
+        end)
+        task.wait()
+    end
 end)
