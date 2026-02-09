@@ -1,352 +1,194 @@
--- Dynamic Speed Lock GUI | Infinite Jump, Noclip, Teleport Tool, Fly
-
--- Cleanup on re-execution
--- FULL CLEANUP ON RE-EXECUTION
-if _G.SpeedLockCleanup then
-    _G.SpeedLockCleanup()
-end
-
-_G.SpeedLockCleanup = function()
-    -- Remove GUI only
-    for _, gui in ipairs(game.CoreGui:GetChildren()) do
-        if gui.Name == "SpeedLockGUI" then
-            gui:Destroy()
-        end
-    end
-
-    -- Disconnect old connections
-    if _G.SpeedLockConnections then
-        for _, c in ipairs(_G.SpeedLockConnections) do
-            pcall(function() c:Disconnect() end)
-        end
-    end
-
-    -- Reset table
-    _G.SpeedLockConnections = {}
-
-    -- IMPORTANT FIX:
-    -- ❗ Do NOT touch character on re-execution
-    -- No WalkSpeed reset
-    -- No JumpPower reset
-    -- No collisions reset
-    -- No BodyVelocity/BodyGyro removal
-    -- No modifying humanoid
-end
-
--- Run cleanup now if script is re-executed
-_G.SpeedLockCleanup()
-
-local UserInputService = game:GetService("UserInputService")
+-- SERVICES
+local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local player = game.Players.LocalPlayer
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
 
--- Utility to get humanoid
-local function getHumanoid()
-    local char = player.Character or player.CharacterAdded:Wait()
-    return char:WaitForChild("Humanoid")
-end
-
-local humanoid = getHumanoid()
-local normalSpeed = humanoid.WalkSpeed
-local boostSpeed = 100
-local infJumpEnabled = false
-local noclip = false
-local flying = false
-local flySpeed = 50
-
--- Default key binds
-local defaultKeys = {
-    holdKey = Enum.KeyCode.LeftShift,
-    toggleKey = Enum.KeyCode.T,
-    guiKey = Enum.KeyCode.Insert,
-    noclipKey = Enum.KeyCode.V,
-    flyKey = Enum.KeyCode.B,
-}
-
-local waitingForBind = nil
-local waitingForBindNoclip = false
-local waitingForBindFly = false
-local toggleMode = false
-
--- GUI Setup
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "SpeedLockGUI"
-ScreenGui.Parent = game:GetService("CoreGui")
-
-local Frame = Instance.new("Frame")
-Frame.Position = UDim2.new(0.4,0,0.4,0)
-Frame.BackgroundColor3 = Color3.fromRGB(20,20,20)
-Frame.Active = true
-Frame.Draggable = true
-Frame.Parent = ScreenGui
-local UICorner = Instance.new("UICorner", Frame)
-UICorner.CornerRadius = UDim.new(0,12)
-
--- Title
-local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1,0,0,30)
-Title.BackgroundTransparency = 1
-Title.Text = "⚡ Speed Lock"
-Title.TextColor3 = Color3.fromRGB(255,255,255)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 18
-Title.Parent = Frame
-
--- UIListLayout for auto stacking
-local UIList = Instance.new("UIListLayout")
-UIList.Padding = UDim.new(0, 8)
-UIList.SortOrder = Enum.SortOrder.LayoutOrder
-UIList.Parent = Frame
-
--- Button definitions table
-local buttons = {
-    {name="Speed", type="input", value=boostSpeed},
-    {name="Hold Key", type="bind", key=defaultKeys.holdKey},
-    {name="Toggle Key", type="bind", key=defaultKeys.toggleKey},
-    {name="GUI Key", type="bind", key=defaultKeys.guiKey},
-    {name="Infinite Jump", type="toggle", value=false},
-    {name="Noclip", type="toggle", value=false, key=defaultKeys.noclipKey},
-    {name="Teleport Tool", type="action"},
-    {name="Fly Speed", type="input", value=flySpeed},
-    {name="Fly", type="toggle", value=false, key=defaultKeys.flyKey},
-}
-
--- Create buttons dynamically
-local buttonHeight = 30
-local buttonInstances = {}
-
-for i, btn in ipairs(buttons) do
-    if btn.type == "input" then
-        local Box = Instance.new("TextBox")
-        Box.Size = UDim2.new(1,-20,0,buttonHeight)
-        Box.BackgroundColor3 = Color3.fromRGB(40,40,40)
-        Box.TextColor3 = Color3.fromRGB(255,255,255)
-        Box.Text = tostring(btn.value)
-        Box.PlaceholderText = btn.name
-        Box.Font = Enum.Font.SourceSans
-        Box.TextSize = 16
-        Box.LayoutOrder = i
-        Box.Parent = Frame
-        local UICornerBtn = Instance.new("UICorner", Box)
-        UICornerBtn.CornerRadius = UDim.new(0,8)
-        buttonInstances[btn.name] = Box
-    else
-        local TextButton = Instance.new("TextButton")
-        TextButton.Size = UDim2.new(1,-20,0,buttonHeight)
-        TextButton.BackgroundColor3 = Color3.fromRGB(40,40,40)
-        TextButton.TextColor3 = Color3.fromRGB(255,255,255)
-        TextButton.Font = Enum.Font.SourceSans
-        TextButton.TextSize = 16
-        TextButton.LayoutOrder = i
-        TextButton.Parent = Frame
-        local UICornerBtn = Instance.new("UICorner", TextButton)
-        UICornerBtn.CornerRadius = UDim.new(0,8)
-
-        if btn.type == "bind" then
-            TextButton.Text = btn.name..": "..btn.key.Name
-        elseif btn.type == "toggle" then
-            TextButton.Text = btn.name..": "..(btn.value and "ON" or "OFF")
-        elseif btn.type == "action" then
-            TextButton.Text = btn.name
-        end
-        buttonInstances[btn.name] = TextButton
+-- 1. HARD RESET & ANTI-DUPLICATION
+local SessionTag = "CoreUltimate_Final_V18"
+if _G[SessionTag] then
+    _G[SessionTag].Enabled = false
+    if _G[SessionTag].BG then _G[SessionTag].BG:Destroy() end
+    if _G[SessionTag].BV then _G[SessionTag].BV:Destroy() end
+    for prop, val in pairs(_G[SessionTag].OriginalLighting) do pcall(function() Lighting[prop] = val end) end
+    for prompt, duration in pairs(_G[SessionTag].OriginalDurations) do
+        if prompt and prompt.Parent then prompt.HoldDuration = duration end
     end
+    local oldGui = CoreGui:FindFirstChild("CoreOverlay_Final")
+    if oldGui then oldGui:Destroy() end
+    task.wait(0.1)
 end
 
--- Resize frame dynamically based on content
-Frame.Size = UDim2.new(0, 260, 0, UIList.AbsoluteContentSize.Y + 20)
-UIList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-    Frame.Size = UDim2.new(0, 260, 0, UIList.AbsoluteContentSize.Y + 20)
+local Session = { 
+    Enabled = true, 
+    BG = nil,
+    BV = nil,
+    Visible = true,
+    OriginalDurations = {}, 
+    OriginalLighting = {
+        Ambient = Lighting.Ambient,
+        OutdoorAmbient = Lighting.OutdoorAmbient,
+        Brightness = Lighting.Brightness,
+        FogEnd = Lighting.FogEnd
+    }
+}
+_G[SessionTag] = Session
+
+-- 2. GUI CONSTRUCTION
+local ScreenGui = Instance.new("ScreenGui", CoreGui); ScreenGui.Name = "CoreOverlay_Final"
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 480, 0, 450)
+MainFrame.Position = UDim2.new(-1, 0, 0.45, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+MainFrame.BorderSizePixel = 0; MainFrame.Active = true; MainFrame.Draggable = true
+
+-- ENTRY ANIMATION
+task.spawn(function()
+    task.wait(0.1)
+    TweenService:Create(MainFrame, TweenInfo.new(0.8, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0.003, 0, 0.45, 0)}):Play()
 end)
 
--- Button callbacks
-buttonInstances["Infinite Jump"].MouseButton1Click:Connect(function()
-    infJumpEnabled = not infJumpEnabled
-    buttonInstances["Infinite Jump"].Text = "Infinite Jump: "..(infJumpEnabled and "ON" or "OFF")
+-- RGB Sideline
+local RGBStrip = Instance.new("Frame", MainFrame)
+RGBStrip.Size = UDim2.new(0, 4, 1, 0); RGBStrip.BorderSizePixel = 0
+task.spawn(function()
+    while Session.Enabled do
+        RGBStrip.BackgroundColor3 = Color3.fromHSV(tick() % 5 / 5, 0.8, 1); task.wait()
+    end
 end)
 
-buttonInstances["Noclip"].MouseButton1Click:Connect(function()
-    waitingForBindNoclip = true
-    buttonInstances["Noclip"].Text = "Noclip: Press any key..."
+local function CreateLabel(text, pos)
+    local lbl = Instance.new("TextLabel", MainFrame)
+    lbl.Size = UDim2.new(0, 100, 0, 35); lbl.Position = pos; lbl.BackgroundTransparency = 1
+    lbl.Text = text; lbl.TextColor3 = Color3.new(1, 1, 1); lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left; return lbl
+end
+
+CreateLabel("Menu", UDim2.new(0, 10, 0, 5))
+local CloseBtn = Instance.new("TextButton", MainFrame)
+CloseBtn.Size = UDim2.new(0, 35, 0, 35); CloseBtn.Position = UDim2.new(1, -35, 0, 0)
+CloseBtn.BackgroundTransparency = 1; CloseBtn.Text = "X"; CloseBtn.TextColor3 = Color3.new(1, 0, 0); CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 20
+CloseBtn.MouseButton1Down:Connect(function() 
+    Session.Enabled = false 
+    if Session.BG then Session.BG:Destroy() end
+    if Session.BV then Session.BV:Destroy() end
+    for prop, val in pairs(Session.OriginalLighting) do pcall(function() Lighting[prop] = val end) end
+    for prompt, duration in pairs(Session.OriginalDurations) do if prompt.Parent then prompt.HoldDuration = duration end end
+    ScreenGui:Destroy() 
 end)
 
-buttonInstances["Teleport Tool"].MouseButton1Click:Connect(function()
-    local Backpack = player:WaitForChild("Backpack")
-    if Backpack:FindFirstChild("Teleport") then return end
-    local tool = Instance.new("Tool")
-    tool.Name = "Teleport"
-    tool.RequiresHandle = false
-    tool.Parent = Backpack
-    tool.Activated:Connect(function()
-        local mouse = player:GetMouse()
-        local char = player.Character
-        if char then char:MoveTo(mouse.Hit.Position) end
+-- FEATURES
+CreateLabel("Noclip", UDim2.new(0, 10, 0, 40))
+local NoclipBtn = Instance.new("TextButton", MainFrame); NoclipBtn.Size = UDim2.new(1, -120, 0, 30); NoclipBtn.Position = UDim2.new(0, 110, 0, 42); NoclipBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); NoclipBtn.Text = "Key: V"; NoclipBtn.TextColor3 = Color3.new(1,1,1)
+
+CreateLabel("Speed", UDim2.new(0, 10, 0, 80))
+local SpeedInput = Instance.new("TextBox", MainFrame); SpeedInput.Size = UDim2.new(0, 60, 0, 30); SpeedInput.Position = UDim2.new(0, 110, 0, 82); SpeedInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30); SpeedInput.Text = "100"; SpeedInput.TextColor3 = Color3.new(1,1,1)
+local SpeedKeyBtn = Instance.new("TextButton", MainFrame); SpeedKeyBtn.Size = UDim2.new(0, 140, 0, 30); SpeedKeyBtn.Position = UDim2.new(0, 180, 0, 82); SpeedKeyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); SpeedKeyBtn.Text = "Key: None"; SpeedKeyBtn.TextColor3 = Color3.new(1,1,1)
+local SpeedModeBtn = Instance.new("TextButton", MainFrame); SpeedModeBtn.Size = UDim2.new(0, 140, 0, 30); SpeedModeBtn.Position = UDim2.new(0, 330, 0, 82); SpeedModeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40); SpeedModeBtn.Text = "Hold"; SpeedModeBtn.TextColor3 = Color3.new(1,1,1)
+
+CreateLabel("Fly", UDim2.new(0, 10, 0, 120))
+local FlyInput = Instance.new("TextBox", MainFrame); FlyInput.Size = UDim2.new(0, 60, 0, 30); FlyInput.Position = UDim2.new(0, 110, 0, 122); FlyInput.BackgroundColor3 = Color3.fromRGB(30,30,30); FlyInput.Text = "100"; FlyInput.TextColor3 = Color3.new(1,1,1)
+local FlyKeyBtn = Instance.new("TextButton", MainFrame); FlyKeyBtn.Size = UDim2.new(1, -190, 0, 30); FlyKeyBtn.Position = UDim2.new(0, 180, 0, 122); FlyKeyBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); FlyKeyBtn.Text = "Key: None"; FlyKeyBtn.TextColor3 = Color3.new(1,1,1)
+
+CreateLabel("Inf Jump", UDim2.new(0, 10, 0, 160))
+local JumpHInput = Instance.new("TextBox", MainFrame); JumpHInput.Size = UDim2.new(0, 60, 0, 30); JumpHInput.Position = UDim2.new(0, 110, 0, 162); JumpHInput.BackgroundColor3 = Color3.fromRGB(30,30,30); JumpHInput.Text = "50"; JumpHInput.TextColor3 = Color3.new(1,1,1)
+local JumpTBtn = Instance.new("TextButton", MainFrame); JumpTBtn.Size = UDim2.new(1, -190, 0, 30); JumpTBtn.Position = UDim2.new(0, 180, 0, 162); JumpTBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); JumpTBtn.Text = "Off"; JumpTBtn.TextColor3 = Color3.new(1,1,1)
+
+local function SimpleToggle(text, pos, callback)
+    CreateLabel(text, pos)
+    local b = Instance.new("TextButton", MainFrame); b.Size = UDim2.new(1, -120, 0, 30); b.Position = UDim2.new(0, 110, pos.Y.Scale, pos.Y.Offset + 2)
+    b.BackgroundColor3 = Color3.fromRGB(150,0,0); b.Text = "Off"; b.TextColor3 = Color3.new(1,1,1)
+    local s = false; b.MouseButton1Down:Connect(function() s = not s; b.Text = s and "On" or "Off"; b.BackgroundColor3 = s and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0); callback(s) end)
+    return b
+end
+
+SimpleToggle("Fullbright", UDim2.new(0, 10, 0, 200), function(v) Lighting.Ambient = v and Color3.new(1,1,1) or Session.OriginalLighting.Ambient; Lighting.OutdoorAmbient = v and Color3.new(1,1,1) or Session.OriginalLighting.OutdoorAmbient end)
+SimpleToggle("No Fog", UDim2.new(0, 10, 0, 240), function(v) Lighting.FogEnd = v and 999999 or Session.OriginalLighting.FogEnd end)
+SimpleToggle("Fast Interact", UDim2.new(0, 10, 0, 280), function(v) _G.FastEnabled = v; if not v then for p, d in pairs(Session.OriginalDurations) do if p.Parent then p.HoldDuration = d end end end end)
+
+CreateLabel("TP Tool", UDim2.new(0, 10, 0, 320))
+local TPBtn = Instance.new("TextButton", MainFrame); TPBtn.Size = UDim2.new(1, -120, 0, 30); TPBtn.Position = UDim2.new(0, 110, 0, 322); TPBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); TPBtn.Text = "Add to Backpack"; TPBtn.TextColor3 = Color3.new(1, 1, 1)
+TPBtn.MouseButton1Down:Connect(function()
+    local tool = Instance.new("Tool"); tool.Name = "Teleport Tool"; tool.RequiresHandle = false; tool.Parent = Players.LocalPlayer.Backpack
+    tool.Activated:Connect(function() local pos = Players.LocalPlayer:GetMouse().Hit.p; Players.LocalPlayer.Character:MoveTo(pos + Vector3.new(0, 3, 0)) end)
+end)
+
+CreateLabel("Hide", UDim2.new(0, 10, 0, 360))
+local HideBtn = Instance.new("TextButton", MainFrame); HideBtn.Size = UDim2.new(1, -120, 0, 30); HideBtn.Position = UDim2.new(0, 110, 0, 362); HideBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); HideBtn.Text = "Key: Insert"; HideBtn.TextColor3 = Color3.new(1, 1, 1)
+
+-- LOGIC
+local Vars = { noclip = false, speedA = false, speedM = "Hold", fly = false, infJ = false }
+local Binds = { noclip = Enum.KeyCode.V, speed = nil, fly = nil, hide = Enum.KeyCode.Insert }
+
+local function SetupRebind(btn, id)
+    btn.MouseButton2Down:Connect(function() 
+        btn.Text = "Press any key..."; local c; c = UIS.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Keyboard then Binds[id] = i.KeyCode; btn.Text = "Key: "..i.KeyCode.Name; c:Disconnect() end end)
     end)
-end)
+end
+SetupRebind(NoclipBtn, "noclip"); SetupRebind(SpeedKeyBtn, "speed"); SetupRebind(FlyKeyBtn, "fly"); SetupRebind(HideBtn, "hide")
 
-buttonInstances["Fly"].MouseButton1Click:Connect(function()
-    flying = not flying
-    buttonInstances["Fly"].Text = "Fly: "..(flying and "ON" or "OFF")
-end)
-
--- Rebind key buttons
-for _, keyBtn in ipairs({"Hold Key", "Toggle Key", "GUI Key", "Fly"}) do
-    if buttonInstances[keyBtn] then
-        buttonInstances[keyBtn].MouseButton1Click:Connect(function()
-            buttonInstances[keyBtn].Text = "Press any key..."
-            if keyBtn == "Fly" then
-                waitingForBindFly = true
-            else
-                waitingForBind = keyBtn
-            end
-        end)
-    end
+local function ToggleVisibility()
+    Session.Visible = not Session.Visible
+    local targetPos = Session.Visible and UDim2.new(0.003, 0, 0.45, 0) or UDim2.new(-1, 0, 0.45, 0)
+    TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
 end
 
--- Input handling
-table.insert(_G.SpeedLockConnections, UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
+SpeedModeBtn.MouseButton1Down:Connect(function() Vars.speedM = (Vars.speedM == "Hold") and "Toggle" or "Hold"; SpeedModeBtn.Text = Vars.speedM end)
+JumpTBtn.MouseButton1Down:Connect(function() Vars.infJ = not Vars.infJ; JumpTBtn.Text = Vars.infJ and "On" or "Off"; JumpTBtn.BackgroundColor3 = Vars.infJ and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0) end)
 
-    -- Key rebinding
-    if waitingForBind and input.UserInputType == Enum.UserInputType.Keyboard then
-        if waitingForBind == "Hold Key" then defaultKeys.holdKey = input.KeyCode
-        elseif waitingForBind == "Toggle Key" then defaultKeys.toggleKey = input.KeyCode
-        elseif waitingForBind == "GUI Key" then defaultKeys.guiKey = input.KeyCode
+local function SetupPrompt(p) if not Session.OriginalDurations[p] then Session.OriginalDurations[p] = p.HoldDuration end if _G.FastEnabled then p.HoldDuration = 0.0001 end end
+for _, o in pairs(workspace:GetDescendants()) do if o:IsA("ProximityPrompt") then SetupPrompt(o) end end
+workspace.DescendantAdded:Connect(function(d) if d:IsA("ProximityPrompt") then SetupPrompt(d) end end)
+
+-- MAIN LOOP
+RunService.Stepped:Connect(function()
+    if not Session.Enabled then return end
+    local char = Players.LocalPlayer.Character; if not char or not char:FindFirstChild("Humanoid") then return end
+    if Vars.noclip then for _, v in pairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end end
+    local sOn = (Vars.speedM == "Hold" and Binds.speed and UIS:IsKeyDown(Binds.speed)) or (Vars.speedM == "Toggle" and Vars.speedA)
+    char.Humanoid.WalkSpeed = sOn and (tonumber(SpeedInput.Text) or 100) or 16
+    
+    -- CUSTOM ANIMATION FLY (FREEFALL STATE)
+    if Vars.fly then
+        if not Session.BV then 
+            Session.BV = Instance.new("BodyVelocity", char.HumanoidRootPart); Session.BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            Session.BG = Instance.new("BodyGyro", char.HumanoidRootPart); Session.BG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge); Session.BG.D = 100
         end
-        buttonInstances[waitingForBind].Text = waitingForBind..": "..input.KeyCode.Name
-        waitingForBind = nil
-        return
-    end
-    if waitingForBindNoclip and input.UserInputType == Enum.UserInputType.Keyboard then
-        defaultKeys.noclipKey = input.KeyCode
-        waitingForBindNoclip = false
-        buttonInstances["Noclip"].Text = "Noclip: "..input.KeyCode.Name.." "..(noclip and "ON" or "OFF")
-        return
-    end
-    if waitingForBindFly and input.UserInputType == Enum.UserInputType.Keyboard then
-        defaultKeys.flyKey = input.KeyCode
-        waitingForBindFly = false
-        buttonInstances["Fly"].Text = "Fly: "..input.KeyCode.Name.." "..(flying and "ON" or "OFF")
-        return
-    end
-
-    -- Key actions
-    if input.KeyCode == defaultKeys.holdKey then
-        humanoid.WalkSpeed = tonumber(buttonInstances["Speed"].Text) or boostSpeed
-    elseif input.KeyCode == defaultKeys.toggleKey then
-        toggleMode = not toggleMode
-        humanoid.WalkSpeed = toggleMode and (tonumber(buttonInstances["Speed"].Text) or boostSpeed) or normalSpeed
-    elseif input.KeyCode == defaultKeys.guiKey then
-        ScreenGui.Enabled = not ScreenGui.Enabled
-    elseif input.KeyCode == defaultKeys.noclipKey then
-        noclip = not noclip
-        buttonInstances["Noclip"].Text = "Noclip: "..defaultKeys.noclipKey.Name.." "..(noclip and "ON" or "OFF")
-    elseif input.KeyCode == defaultKeys.flyKey then
-        flying = not flying
-        buttonInstances["Fly"].Text = "Fly: "..(flying and "ON" or "OFF")
-    end
-end))
-
-table.insert(_G.SpeedLockConnections, UserInputService.InputEnded:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == defaultKeys.holdKey and not toggleMode then
-        humanoid.WalkSpeed = normalSpeed
-    end
-end))
-
--- Infinite jump logic
-UserInputService.JumpRequest:Connect(function()
-    if infJumpEnabled then
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    end
-end)
-
--- Noclip logic
-table.insert(_G.SpeedLockConnections, RunService.Stepped:Connect(function()
-    if noclip and player.Character then
-        for _, part in pairs(player.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
-end))
-
--- Fly logic
-local bv, bg
-table.insert(_G.SpeedLockConnections, RunService.RenderStepped:Connect(function()
-    if flying and player.Character then
-        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            if not bv then
-                bv = Instance.new("BodyVelocity")
-                bv.MaxForce = Vector3.new(1e5,1e5,1e5)
-                bv.Velocity = Vector3.new(0,0,0)
-                bv.Parent = hrp
-
-                bg = Instance.new("BodyGyro")
-                bg.MaxTorque = Vector3.new(1e5,1e5,1e5)
-                bg.CFrame = hrp.CFrame
-                bg.Parent = hrp
-            end
-
-            local cam = workspace.CurrentCamera
-            local moveDir = Vector3.new(0,0,0)
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Vector3.new(0,0,1) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir + Vector3.new(0,0,-1) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir + Vector3.new(-1,0,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Vector3.new(1,0,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0,1,0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir + Vector3.new(0,-1,0) end
-
-            local speedVal = tonumber(buttonInstances["Fly Speed"].Text) or flySpeed
-            bv.Velocity = (cam.CFrame.LookVector*moveDir.Z + cam.CFrame.RightVector*moveDir.X + Vector3.new(0,moveDir.Y,0)) * speedVal
-            bg.CFrame = CFrame.new(hrp.Position, hrp.Position + cam.CFrame.LookVector)
-        end
+        -- Triggers your paid Falling animation
+        char.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall) 
+        
+        local cam = workspace.CurrentCamera; local s = tonumber(FlyInput.Text) or 100
+        local d = Vector3.new(0,0,0)
+        if UIS:IsKeyDown("W") then d = d + cam.CFrame.LookVector end
+        if UIS:IsKeyDown("S") then d = d - cam.CFrame.LookVector end
+        if UIS:IsKeyDown("A") then d = d - cam.CFrame.RightVector end
+        if UIS:IsKeyDown("D") then d = d + cam.CFrame.RightVector end
+        Session.BV.Velocity = d * s
+        Session.BG.CFrame = cam.CFrame
     else
-        if bv then bv:Destroy(); bv=nil end
-        if bg then bg:Destroy(); bg=nil end
+        if Session.BV then Session.BV:Destroy(); Session.BV = nil end
+        if Session.BG then Session.BG:Destroy(); Session.BG = nil end
     end
-end))
-
--- Respawn support
-player.CharacterAdded:Connect(function(char)
-    humanoid = char:WaitForChild("Humanoid")
-    normalSpeed = humanoid.WalkSpeed
+    if _G.FastEnabled then for p, _ in pairs(Session.OriginalDurations) do if p.Parent then p.HoldDuration = 0.0001 end end end
 end)
 
--- Fly Speed input logic
-buttonInstances["Fly Speed"].FocusLost:Connect(function(enter)
-    if enter then
-        local val = tonumber(buttonInstances["Fly Speed"].Text)
-        if val then flySpeed = val else buttonInstances["Fly Speed"].Text = tostring(flySpeed) end
-    end
+UIS.JumpRequest:Connect(function() 
+    if Vars.infJ and Session.Enabled then 
+        local char = Players.LocalPlayer.Character
+        if char and char:FindFirstChild("HumanoidRootPart") then
+            char.Humanoid:ChangeState(3)
+            local current = char.HumanoidRootPart.Velocity
+            char.HumanoidRootPart.Velocity = Vector3.new(current.X, tonumber(JumpHInput.Text) or 50, current.Z)
+        end
+    end 
 end)
 
--- Speed input logic
-buttonInstances["Speed"].FocusLost:Connect(function(enter)
-    if enter then
-        local val = tonumber(buttonInstances["Speed"].Text)
-        if val then boostSpeed = val else buttonInstances["Speed"].Text = tostring(boostSpeed) end
-    end
-end)
-
--- Close Button
-local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0,30,0,30)
-CloseBtn.Position = UDim2.new(1,-35,0,5)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(255,0,0)
-CloseBtn.TextColor3 = Color3.fromRGB(255,255,255)
-CloseBtn.Text = "X"
-CloseBtn.Font = Enum.Font.SourceSansBold
-CloseBtn.TextSize = 18
-CloseBtn.Parent = Frame
-local UICornerClose = Instance.new("UICorner", CloseBtn)
-UICornerClose.CornerRadius = UDim.new(0,6)
-CloseBtn.MouseButton1Click:Connect(function()
-    for _, c in ipairs(_G.SpeedLockConnections) do
-        pcall(function() c:Disconnect() end)
-    end
-    _G.SpeedLockConnections = {}
-    ScreenGui:Destroy()
+UIS.InputBegan:Connect(function(i, g)
+    if g or not Session.Enabled then return end
+    if i.KeyCode == Binds.hide then ToggleVisibility()
+    elseif i.KeyCode == Binds.noclip then Vars.noclip = not Vars.noclip; NoclipBtn.BackgroundColor3 = Vars.noclip and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0)
+    elseif Binds.speed and i.KeyCode == Binds.speed and Vars.speedM == "Toggle" then Vars.speedA = not Vars.speedA; SpeedKeyBtn.BackgroundColor3 = Vars.speedA and Color3.fromRGB(0,150,0) or Color3.fromRGB(50,50,50)
+    elseif Binds.fly and i.KeyCode == Binds.fly then Vars.fly = not Vars.fly; FlyKeyBtn.BackgroundColor3 = Vars.fly and Color3.fromRGB(0,150,0) or Color3.fromRGB(50,50,50) end
 end)
