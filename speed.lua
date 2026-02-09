@@ -1,201 +1,231 @@
--- SERVICES
-local UIS = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")
-local Players = game:GetService("Players")
-local Lighting = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
+-- [[ Smart Speed Lock - Final Optimized Logic ]] --
 
--- 1. HARD RESET & ANTI-DUPLICATION
-local SessionTag = "CoreUltimate_Final_V19"
-if _G[SessionTag] then
-    _G[SessionTag].Enabled = false
-    if _G[SessionTag].BG then _G[SessionTag].BG:Destroy() end
-    if _G[SessionTag].BV then _G[SessionTag].BV:Destroy() end
-    for prop, val in pairs(_G[SessionTag].OriginalLighting) do pcall(function() Lighting[prop] = val end) end
-    for prompt, duration in pairs(_G[SessionTag].OriginalDurations) do
-        if prompt and prompt.Parent then prompt.HoldDuration = duration end
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local player = game.Players.LocalPlayer
+
+-- 1. CLEANUP & ANTI-GHOSTING
+if _G.SpeedLockCleanup then _G.SpeedLockCleanup() end
+_G.SpeedLockConnections = {}
+_G.SpeedLockCleanup = function()
+    local gui = game.CoreGui:FindFirstChild("SpeedLockGUI")
+    if gui then
+        local frame = gui:FindFirstChild("MainFrame")
+        if frame then
+            local t = TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(-0.5, 0, 1, -380)})
+            t:Play() t.Completed:Wait()
+        end
+        gui:Destroy()
     end
-    local oldGui = CoreGui:FindFirstChild("CoreOverlay_Final")
-    if oldGui then oldGui:Destroy() end
-    task.wait(0.1)
+    for _, c in ipairs(_G.SpeedLockConnections) do pcall(function() c:Disconnect() end) end
+    _G.SpeedLockConnections = {}
+    if _G.OriginalLighting then
+        Lighting.Brightness = _G.OriginalLighting.Brightness
+        Lighting.ClockTime = _G.OriginalLighting.ClockTime
+        Lighting.OutdoorAmbient = _G.OriginalLighting.Ambient
+        Lighting.FogEnd = _G.OriginalLighting.FogEnd
+        if _G.StoredAtmosphere then _G.StoredAtmosphere.Parent = Lighting end
+    end
 end
 
-local Session = { 
-    Enabled = true, 
-    BG = nil,
-    BV = nil,
-    Visible = true,
-    OriginalDurations = {}, 
-    OriginalLighting = {
-        Ambient = Lighting.Ambient,
-        OutdoorAmbient = Lighting.OutdoorAmbient,
-        Brightness = Lighting.Brightness,
-        FogEnd = Lighting.FogEnd
-    }
-}
-_G[SessionTag] = Session
+-- 2. SAVE STATE
+_G.OriginalLighting = { Brightness = Lighting.Brightness, ClockTime = Lighting.ClockTime, Ambient = Lighting.OutdoorAmbient, FogEnd = Lighting.FogEnd }
+_G.StoredAtmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
 
--- 2. GUI CONSTRUCTION
-local ScreenGui = Instance.new("ScreenGui", CoreGui); ScreenGui.Name = "CoreOverlay_Final"
+local boostSpeed, holdKey = 100, nil
+local noclip, noclipKey = false, Enum.KeyCode.V
+local flySpeed, flyKey, flying = 100, nil, false
+local infJumpEnabled, jumpPower = false, 50
+local fastInteract, fullbright, nofog = false, false, false
+local guiKey = Enum.KeyCode.Insert
+local waitingForBind = nil
+local originalHold = {}
+
+-- 3. GUI CONSTRUCTION (Bottom-Left)
+local ScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+ScreenGui.Name = "SpeedLockGUI"; ScreenGui.ResetOnSpawn = false
+
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 480, 0, 450)
-MainFrame.Position = UDim2.new(-1, 0, 0.45, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
-MainFrame.BorderSizePixel = 0; MainFrame.Active = true; MainFrame.Draggable = true
-
--- ENTRY ANIMATION
-task.spawn(function()
-    task.wait(0.1)
-    TweenService:Create(MainFrame, TweenInfo.new(0.8, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0.003, 0, 0.45, 0)}):Play()
-end)
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 320, 0, 350)
+MainFrame.Position = UDim2.new(-0.5, 0, 1, -380)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true; MainFrame.Draggable = true
+Instance.new("UICorner", MainFrame)
 
 -- RGB Sideline
-local RGBStrip = Instance.new("Frame", MainFrame)
-RGBStrip.Size = UDim2.new(0, 4, 1, 0); RGBStrip.BorderSizePixel = 0
+local SideLine = Instance.new("Frame", MainFrame)
+SideLine.Size = UDim2.new(0, 3, 1, -20); SideLine.Position = UDim2.new(0, 5, 0, 10); SideLine.BorderSizePixel = 0
 task.spawn(function()
-    while Session.Enabled do
-        RGBStrip.BackgroundColor3 = Color3.fromHSV(tick() % 5 / 5, 0.8, 1); task.wait()
+    while task.wait() do 
+        if not MainFrame:IsDescendantOf(game) then break end
+        SideLine.BackgroundColor3 = Color3.fromHSV(tick() % 5 / 5, 0.8, 1) 
     end
 end)
 
-local function CreateLabel(text, pos)
-    local lbl = Instance.new("TextLabel", MainFrame)
-    lbl.Size = UDim2.new(0, 100, 0, 35); lbl.Position = pos; lbl.BackgroundTransparency = 1
-    lbl.Text = text; lbl.TextColor3 = Color3.new(1, 1, 1); lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 13
-    lbl.TextXAlignment = Enum.TextXAlignment.Left; return lbl
+local Title = Instance.new("TextLabel", MainFrame)
+Title.Size = UDim2.new(0, 200, 0, 40); Title.Position = UDim2.new(0, 15, 0, 0); Title.BackgroundTransparency = 1
+Title.Text = "MENU"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = "GothamBold"; Title.TextSize = 16; Title.TextXAlignment = "Left"
+
+local TerminateBtn = Instance.new("TextButton", MainFrame)
+TerminateBtn.Size = UDim2.new(0, 30, 0, 30); TerminateBtn.Position = UDim2.new(1, -35, 0, 5); TerminateBtn.BackgroundTransparency = 1
+TerminateBtn.Text = "X"; TerminateBtn.TextColor3 = Color3.fromRGB(255, 80, 80); TerminateBtn.Font = "GothamBold"; TerminateBtn.TextSize = 18
+TerminateBtn.MouseButton1Click:Connect(_G.SpeedLockCleanup)
+
+local Content = Instance.new("Frame", MainFrame)
+Content.Size = UDim2.new(1, -25, 1, -50); Content.Position = UDim2.new(0, 15, 0, 45); Content.BackgroundTransparency = 1
+Instance.new("UIListLayout", Content).Padding = UDim.new(0, 6)
+
+-- Injection Animation
+TweenService:Create(MainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 20, 1, -380)}):Play()
+
+-- 4. HELPERS
+local function createRow(name)
+    local Row = Instance.new("Frame", Content); Row.Size = UDim2.new(1, 0, 0, 35); Row.BackgroundColor3 = Color3.fromRGB(25, 25, 25); Instance.new("UICorner", Row)
+    local Lab = Instance.new("TextLabel", Row); Lab.Size = UDim2.new(0.4, 0, 1, 0); Lab.Position = UDim2.new(0, 10, 0, 0); Lab.BackgroundTransparency = 1
+    Lab.Text = name; Lab.TextColor3 = Color3.fromRGB(180, 180, 180); Lab.Font = "Gotham"; Lab.TextSize = 12; Lab.TextXAlignment = "Left"
+    local RightAlign = Instance.new("Frame", Row); RightAlign.Size = UDim2.new(0.6, -10, 1, 0); RightAlign.Position = UDim2.new(0.4, 0, 0, 0); RightAlign.BackgroundTransparency = 1
+    local Layout = Instance.new("UIListLayout", RightAlign); Layout.FillDirection = "Horizontal"; Layout.HorizontalAlignment = "Right"; Layout.VerticalAlignment = "Center"; Layout.Padding = UDim.new(0, 5)
+    return RightAlign
 end
 
-CreateLabel("Menu", UDim2.new(0, 10, 0, 5))
-local CloseBtn = Instance.new("TextButton", MainFrame)
-CloseBtn.Size = UDim2.new(0, 35, 0, 35); CloseBtn.Position = UDim2.new(1, -35, 0, 0)
-CloseBtn.BackgroundTransparency = 1; CloseBtn.Text = "X"; CloseBtn.TextColor3 = Color3.new(1, 0, 0); CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 20
-CloseBtn.MouseButton1Down:Connect(function() 
-    Session.Enabled = false 
-    if Session.BG then Session.BG:Destroy() end
-    if Session.BV then Session.BV:Destroy() end
-    for prop, val in pairs(Session.OriginalLighting) do pcall(function() Lighting[prop] = val end) end
-    for prompt, duration in pairs(Session.OriginalDurations) do if prompt.Parent then prompt.HoldDuration = duration end end
-    ScreenGui:Destroy() 
+local function mkBox(p, t)
+    local b = Instance.new("TextBox", p); b.Size = UDim2.new(0, 55, 0.7, 0); b.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    b.Text = t; b.TextColor3 = Color3.new(1,1,1); b.Font = "GothamSemibold"; b.TextSize = 11; Instance.new("UICorner", b); return b
+end
+
+local function mkBtn(p, t, w)
+    local b = Instance.new("TextButton", p); b.Size = UDim2.new(0, w or 85, 0.7, 0); b.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    b.Text = t; b.TextColor3 = Color3.new(1,1,1); b.Font = "GothamSemibold"; b.TextSize = 11; Instance.new("UICorner", b); return b
+end
+
+-- Rows Setup
+local speedR = createRow("👟 WALK SPEED"); local speedVal = mkBox(speedR, "100"); local speedKey = mkBtn(speedR, "Key: None")
+local jumpR = createRow("🦘 INFINITE JUMP"); local jumpVal = mkBox(jumpR, "50"); local jumpTog = mkBtn(jumpR, "Off")
+local noclipBtn = mkBtn(createRow("🚪 NO CLIP"), "V")
+local flyR = createRow("🦅 FLY"); local flyVal = mkBox(flyR, "100"); local flyBtn = mkBtn(flyR, "Key: None")
+local tpBtn = mkBtn(createRow("🔧 TP TOOL"), "Add")
+local interactTog = mkBtn(createRow("⏩ FAST INTERACT"), "Off")
+local moreBtn = mkBtn(createRow(""), "MORE", 280)
+
+local moreFrame = Instance.new("Frame", Content); moreFrame.Size = UDim2.new(1, 0, 0, 120); moreFrame.Visible = false; moreFrame.BackgroundTransparency = 1
+Instance.new("UIListLayout", moreFrame).Padding = UDim.new(0, 5)
+
+local function mkSub(n)
+    local r = Instance.new("Frame", moreFrame); r.Size = UDim2.new(1, 0, 0, 35); r.BackgroundColor3 = Color3.fromRGB(20, 20, 20); Instance.new("UICorner", r)
+    local l = Instance.new("TextLabel", r); l.Size = UDim2.new(0.5,0,1,0); l.Position = UDim2.new(0,15,0,0); l.BackgroundTransparency=1; l.Text=n; l.TextColor3=Color3.fromRGB(150,150,150); l.Font="Gotham"; l.TextSize=11; l.TextXAlignment="Left"
+    local b = mkBtn(r, "Off", 85); b.Position = UDim2.new(1, -90, 0.15, 0); return b
+end
+local fbBtn = mkSub("🔦 FULL BRIGHT"); local nfBtn = mkSub("🔭 NO FOG"); local hideBtn = mkSub("🚫 HIDE GUI"); hideBtn.Text = "Insert"
+
+-- 5. ENGINE LOGIC
+local function toggleGui()
+    local isHidden = MainFrame.Position.X.Scale < 0
+    local target = isHidden and UDim2.new(0, 20, 1, -380) or UDim2.new(-0.5, 0, 1, -380)
+    TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart), {Position = target}):Play()
+end
+
+moreBtn.MouseButton1Click:Connect(function()
+    moreFrame.Visible = not moreFrame.Visible
+    local targetHeight = moreFrame.Visible and 480 or 350
+    TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = UDim2.new(0, 320, 0, targetHeight)}):Play()
 end)
 
--- FEATURES
-CreateLabel("🚪 Noclip", UDim2.new(0, 10, 0, 40))
-local NoclipBtn = Instance.new("TextButton", MainFrame); NoclipBtn.Size = UDim2.new(1, -120, 0, 30); NoclipBtn.Position = UDim2.new(0, 110, 0, 42); NoclipBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0); NoclipBtn.Text = "Key: V"; NoclipBtn.TextColor3 = Color3.new(1,1,1)
+-- Binds
+local function startBind(btn, tag) waitingForBind = tag; btn.Text = "..." end
+speedKey.MouseButton1Click:Connect(function() startBind(speedKey, "Speed") end)
+flyBtn.MouseButton1Click:Connect(function() startBind(flyBtn, "Fly") end)
+noclipBtn.MouseButton1Click:Connect(function() startBind(noclipBtn, "Noclip") end)
+hideBtn.MouseButton1Click:Connect(function() startBind(hideBtn, "Hide") end)
 
-CreateLabel("👟 Speed", UDim2.new(0, 10, 0, 80))
-local SpeedInput = Instance.new("TextBox", MainFrame); SpeedInput.Size = UDim2.new(0, 60, 0, 30); SpeedInput.Position = UDim2.new(0, 110, 0, 82); SpeedInput.BackgroundColor3 = Color3.fromRGB(30, 30, 30); SpeedInput.Text = "100"; SpeedInput.TextColor3 = Color3.new(1,1,1)
-local SpeedKeyBtn = Instance.new("TextButton", MainFrame); SpeedKeyBtn.Size = UDim2.new(0, 140, 0, 30); SpeedKeyBtn.Position = UDim2.new(0, 180, 0, 82); SpeedKeyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); SpeedKeyBtn.Text = "Key: None"; SpeedKeyBtn.TextColor3 = Color3.new(1,1,1)
-local SpeedModeBtn = Instance.new("TextButton", MainFrame); SpeedModeBtn.Size = UDim2.new(0, 140, 0, 30); SpeedModeBtn.Position = UDim2.new(0, 330, 0, 82); SpeedModeBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40); SpeedModeBtn.Text = "Hold"; SpeedModeBtn.TextColor3 = Color3.new(1,1,1)
-
-CreateLabel("🦅 Fly", UDim2.new(0, 10, 0, 120))
-local FlyInput = Instance.new("TextBox", MainFrame); FlyInput.Size = UDim2.new(0, 60, 0, 30); FlyInput.Position = UDim2.new(0, 110, 0, 122); FlyInput.BackgroundColor3 = Color3.fromRGB(30,30,30); FlyInput.Text = "100"; FlyInput.TextColor3 = Color3.new(1,1,1)
-local FlyKeyBtn = Instance.new("TextButton", MainFrame); FlyKeyBtn.Size = UDim2.new(1, -190, 0, 30); FlyKeyBtn.Position = UDim2.new(0, 180, 0, 122); FlyKeyBtn.BackgroundColor3 = Color3.fromRGB(50,50,50); FlyKeyBtn.Text = "Key: None"; FlyKeyBtn.TextColor3 = Color3.new(1,1,1)
-
-CreateLabel("🦘 Inf Jump", UDim2.new(0, 10, 0, 160))
-local JumpHInput = Instance.new("TextBox", MainFrame); JumpHInput.Size = UDim2.new(0, 60, 0, 30); JumpHInput.Position = UDim2.new(0, 110, 0, 162); JumpHInput.BackgroundColor3 = Color3.fromRGB(30,30,30); JumpHInput.Text = "50"; JumpHInput.TextColor3 = Color3.new(1,1,1)
-local JumpTBtn = Instance.new("TextButton", MainFrame); JumpTBtn.Size = UDim2.new(1, -190, 0, 30); JumpTBtn.Position = UDim2.new(0, 180, 0, 162); JumpTBtn.BackgroundColor3 = Color3.fromRGB(150,0,0); JumpTBtn.Text = "Off"; JumpTBtn.TextColor3 = Color3.new(1,1,1)
-
-local function SimpleToggle(text, pos, callback)
-    CreateLabel(text, pos)
-    local b = Instance.new("TextButton", MainFrame); b.Size = UDim2.new(1, -120, 0, 30); b.Position = UDim2.new(0, 110, pos.Y.Scale, pos.Y.Offset + 2)
-    b.BackgroundColor3 = Color3.fromRGB(150,0,0); b.Text = "Off"; b.TextColor3 = Color3.new(1,1,1)
-    local s = false; b.MouseButton1Down:Connect(function() s = not s; b.Text = s and "On" or "Off"; b.BackgroundColor3 = s and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0); callback(s) end)
-    return b
-end
-
-SimpleToggle("🔦 Fullbright", UDim2.new(0, 10, 0, 200), function(v) Lighting.Ambient = v and Color3.new(1,1,1) or Session.OriginalLighting.Ambient; Lighting.OutdoorAmbient = v and Color3.new(1,1,1) or Session.OriginalLighting.OutdoorAmbient end)
-SimpleToggle("🌫️ No Fog", UDim2.new(0, 10, 0, 240), function(v) Lighting.FogEnd = v and 999999 or Session.OriginalLighting.FogEnd end)
-SimpleToggle("⏩ Fast Interact", UDim2.new(0, 10, 0, 280), function(v) _G.FastEnabled = v; if not v then for p, d in pairs(Session.OriginalDurations) do if p.Parent then p.HoldDuration = d end end end end)
-
-CreateLabel("🔨 TP Tool", UDim2.new(0, 10, 0, 320))
-local TPBtn = Instance.new("TextButton", MainFrame); TPBtn.Size = UDim2.new(1, -120, 0, 30); TPBtn.Position = UDim2.new(0, 110, 0, 322); TPBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); TPBtn.Text = "Add to Backpack"; TPBtn.TextColor3 = Color3.new(1, 1, 1)
-TPBtn.MouseButton1Down:Connect(function()
-    local tool = Instance.new("Tool"); tool.Name = "Teleport Tool"; tool.RequiresHandle = false; tool.Parent = Players.LocalPlayer.Backpack
-    tool.Activated:Connect(function() local pos = Players.LocalPlayer:GetMouse().Hit.p; Players.LocalPlayer.Character:MoveTo(pos + Vector3.new(0, 3, 0)) end)
+jumpTog.MouseButton1Click:Connect(function()
+    infJumpEnabled = not infJumpEnabled
+    jumpTog.Text = infJumpEnabled and "On" or "Off"
 end)
 
-CreateLabel("🚫 Hide Gui", UDim2.new(0, 10, 0, 360))
-local HideBtn = Instance.new("TextButton", MainFrame); HideBtn.Size = UDim2.new(1, -120, 0, 30); HideBtn.Position = UDim2.new(0, 110, 0, 362); HideBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50); HideBtn.Text = "Key: Insert"; HideBtn.TextColor3 = Color3.new(1, 1, 1)
-
--- LOGIC ENGINE
-local Vars = { noclip = false, speedA = false, speedM = "Hold", fly = false, infJ = false }
-local Binds = { noclip = Enum.KeyCode.V, speed = nil, fly = nil, hide = Enum.KeyCode.Insert }
-
-local function SetupRebind(btn, id)
-    btn.MouseButton2Down:Connect(function() 
-        btn.Text = "Press any key..."; local c; c = UIS.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Keyboard then Binds[id] = i.KeyCode; btn.Text = "Key: "..i.KeyCode.Name; c:Disconnect() end end)
-    end)
-end
-SetupRebind(NoclipBtn, "noclip"); SetupRebind(SpeedKeyBtn, "speed"); SetupRebind(FlyKeyBtn, "fly"); SetupRebind(HideBtn, "hide")
-
-local function ToggleVisibility()
-    Session.Visible = not Session.Visible
-    local targetPos = Session.Visible and UDim2.new(0.003, 0, 0.45, 0) or UDim2.new(-1, 0, 0.45, 0)
-    TweenService:Create(MainFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = targetPos}):Play()
-end
-
-SpeedModeBtn.MouseButton1Down:Connect(function() Vars.speedM = (Vars.speedM == "Hold") and "Toggle" or "Hold"; SpeedModeBtn.Text = Vars.speedM end)
-JumpTBtn.MouseButton1Down:Connect(function() Vars.infJ = not Vars.infJ; JumpTBtn.Text = Vars.infJ and "On" or "Off"; JumpTBtn.BackgroundColor3 = Vars.infJ and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0) end)
-
-local function SetupPrompt(p) if not Session.OriginalDurations[p] then Session.OriginalDurations[p] = p.HoldDuration end if _G.FastEnabled then p.HoldDuration = 0.0001 end end
-for _, o in pairs(workspace:GetDescendants()) do if o:IsA("ProximityPrompt") then SetupPrompt(o) end end
-workspace.DescendantAdded:Connect(function(d) if d:IsA("ProximityPrompt") then SetupPrompt(d) end end)
-
--- MAIN LOOP
-RunService.Stepped:Connect(function()
-    if not Session.Enabled then return end
-    local char = Players.LocalPlayer.Character; if not char or not char:FindFirstChild("Humanoid") then return end
-    if Vars.noclip then for _, v in pairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end end
-    local sOn = (Vars.speedM == "Hold" and Binds.speed and UIS:IsKeyDown(Binds.speed)) or (Vars.speedM == "Toggle" and Vars.speedA)
-    char.Humanoid.WalkSpeed = sOn and (tonumber(SpeedInput.Text) or 100) or 16
-    
-    -- STUBBORN FLY LOGIC (WITH SPACE/SHIFT)
-    if Vars.fly then
-        if not Session.BV then 
-            Session.BV = Instance.new("BodyVelocity", char.HumanoidRootPart); Session.BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-            Session.BG = Instance.new("BodyGyro", char.HumanoidRootPart); Session.BG.MaxTorque = Vector3.new(math.huge, math.huge, math.huge); Session.BG.D = 100
-        end
-        char.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall) -- Premium Anim State
-        
-        local cam = workspace.CurrentCamera; local s = tonumber(FlyInput.Text) or 100
-        local d = Vector3.new(0,0,0)
-        
-        -- Movement
-        if UIS:IsKeyDown(Enum.KeyCode.W) then d = d + cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.S) then d = d - cam.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.A) then d = d - cam.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.D) then d = d + cam.CFrame.RightVector end
-        
-        -- Up/Down logic
-        if UIS:IsKeyDown(Enum.KeyCode.Space) then d = d + Vector3.new(0, 1, 0) end
-        if UIS:IsKeyDown(Enum.KeyCode.LeftShift) then d = d + Vector3.new(0, -1, 0) end
-        
-        Session.BV.Velocity = d.Unit * s -- Normalizes diagonal speed
-        if d.Magnitude == 0 then Session.BV.Velocity = Vector3.new(0,0,0) end
-        Session.BG.CFrame = cam.CFrame
-    else
-        if Session.BV then Session.BV:Destroy(); Session.BV = nil end
-        if Session.BG then Session.BG:Destroy(); Session.BG = nil end
+table.insert(_G.SpeedLockConnections, UserInputService.InputBegan:Connect(function(input, gpe)
+    if waitingForBind then
+        if input.KeyCode == Enum.KeyCode.Unknown then return end
+        if waitingForBind == "Speed" then holdKey = input.KeyCode; speedKey.Text = "Key: "..input.KeyCode.Name
+        elseif waitingForBind == "Fly" then flyKey = input.KeyCode; flyBtn.Text = "Key: "..input.KeyCode.Name
+        elseif waitingForBind == "Noclip" then noclipKey = input.KeyCode; noclipBtn.Text = input.KeyCode.Name
+        elseif waitingForBind == "Hide" then guiKey = input.KeyCode; hideBtn.Text = input.KeyCode.Name end
+        waitingForBind = nil; return
     end
-    if _G.FastEnabled then for p, _ in pairs(Session.OriginalDurations) do if p.Parent then p.HoldDuration = 0.0001 end end end
+    if gpe then return end
+    if input.KeyCode == guiKey then toggleGui()
+    elseif input.KeyCode == holdKey then pcall(function() player.Character.Humanoid.WalkSpeed = tonumber(speedVal.Text) or 100 end)
+    elseif input.KeyCode == noclipKey then noclip = not noclip
+    elseif input.KeyCode == flyKey then flying = not flying end
+end))
+
+table.insert(_G.SpeedLockConnections, UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == holdKey then pcall(function() player.Character.Humanoid.WalkSpeed = 16 end) end
+end))
+
+-- Execution Loops
+table.insert(_G.SpeedLockConnections, RunService.Stepped:Connect(function()
+    if noclip and player.Character then
+        for _, v in pairs(player.Character:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
+    end
+    if fullbright then Lighting.Brightness = 2; Lighting.ClockTime = 14; Lighting.OutdoorAmbient = Color3.new(1,1,1) end
+end))
+
+fbBtn.MouseButton1Click:Connect(function() 
+    fullbright = not fullbright; fbBtn.Text = fullbright and "On" or "Off"
+    if not fullbright then Lighting.Brightness = _G.OriginalLighting.Brightness; Lighting.ClockTime = _G.OriginalLighting.ClockTime; Lighting.OutdoorAmbient = _G.OriginalLighting.Ambient end
 end)
 
-UIS.JumpRequest:Connect(function() 
-    if Vars.infJ and Session.Enabled and not Vars.fly then -- Don't jump while flying
-        local char = Players.LocalPlayer.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            char.Humanoid:ChangeState(3)
-            local current = char.HumanoidRootPart.Velocity
-            char.HumanoidRootPart.Velocity = Vector3.new(current.X, tonumber(JumpHInput.Text) or 50, current.Z)
+nfBtn.MouseButton1Click:Connect(function()
+    nofog = not nofog; nfBtn.Text = nofog and "On" or "Off"
+    if nofog then Lighting.FogEnd = 100000; local atm = Lighting:FindFirstChildOfClass("Atmosphere") if atm then atm.Parent = nil end
+    else Lighting.FogEnd = _G.OriginalLighting.FogEnd; if _G.StoredAtmosphere then _G.StoredAtmosphere.Parent = Lighting end end
+end)
+
+interactTog.MouseButton1Click:Connect(function()
+    fastInteract = not fastInteract; interactTog.Text = fastInteract and "On" or "Off"
+    for _, v in ipairs(workspace:GetDescendants()) do if v:IsA("ProximityPrompt") then
+        if fastInteract then if originalHold[v] == nil then originalHold[v] = v.HoldDuration end v.HoldDuration = 0 
+        else v.HoldDuration = originalHold[v] or v.HoldDuration end
+    end end
+end)
+
+-- Fly Script
+local bv, bg
+table.insert(_G.SpeedLockConnections, RunService.RenderStepped:Connect(function()
+    if flying and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = player.Character.HumanoidRootPart
+        if not bv or bv.Parent ~= hrp then bv = Instance.new("BodyVelocity", hrp); bv.MaxForce = Vector3.new(1e6,1e6,1e6); bg = Instance.new("BodyGyro", hrp); bg.MaxTorque = Vector3.new(1e6,1e6,1e6) end
+        local cam = workspace.CurrentCamera; local dir = Vector3.new(0,0,0)
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += Vector3.new(0,1,0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= Vector3.new(0,1,0) end
+        bv.Velocity = dir.Unit * (tonumber(flyVal.Text) or 100); if dir == Vector3.new(0,0,0) then bv.Velocity = Vector3.new(0,0,0) end; bg.CFrame = cam.CFrame
+    else if bv then bv:Destroy(); bv = nil; bg:Destroy(); bg = nil end end
+end))
+
+-- SMART INF JUMP (Custom Logic)
+table.insert(_G.SpeedLockConnections, UserInputService.JumpRequest:Connect(function()
+    if infJumpEnabled and player.Character then
+        local hum = player.Character:FindFirstChildOfClass("Humanoid")
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+        if hum and hrp then
+            -- Reset state to allow "fresh" jump
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            -- Apply upward impulse relative to mass
+            local jumpPowerVal = tonumber(jumpVal.Text) or 50
+            hrp.Velocity = Vector3.new(hrp.Velocity.X, jumpPowerVal, hrp.Velocity.Z)
         end
-    end 
-end)
+    end
+end))
 
-UIS.InputBegan:Connect(function(i, g)
-    if g or not Session.Enabled then return end
-    if i.KeyCode == Binds.hide then ToggleVisibility()
-    elseif i.KeyCode == Binds.noclip then Vars.noclip = not Vars.noclip; NoclipBtn.BackgroundColor3 = Vars.noclip and Color3.fromRGB(0,150,0) or Color3.fromRGB(150,0,0)
-    elseif Binds.speed and i.KeyCode == Binds.speed and Vars.speedM == "Toggle" then Vars.speedA = not Vars.speedA; SpeedKeyBtn.BackgroundColor3 = Vars.speedA and Color3.fromRGB(0,150,0) or Color3.fromRGB(50,50,50)
-    elseif Binds.fly and i.KeyCode == Binds.fly then Vars.fly = not Vars.fly; FlyKeyBtn.BackgroundColor3 = Vars.fly and Color3.fromRGB(0,150,0) or Color3.fromRGB(50,50,50) end
+tpBtn.MouseButton1Click:Connect(function()
+    local t = Instance.new("Tool", player.Backpack); t.Name = "TP Tool"; t.RequiresHandle = false
+    t.Activated:Connect(function() player.Character:MoveTo(player:GetMouse().Hit.Position) end)
 end)
