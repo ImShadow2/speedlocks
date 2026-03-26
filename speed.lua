@@ -12,7 +12,7 @@ local TEXT_COLOR = Color3.fromRGB(255, 255, 255)
 -- 1. CLEANUP & RESTORE SYSTEM
 if _G.SpeedLockCleanup then _G.SpeedLockCleanup() end
 
-local originalSettings = {
+local originalLighting = {
     Brightness = Lighting.Brightness,
     ClockTime = Lighting.ClockTime,
     OutdoorAmbient = Lighting.OutdoorAmbient,
@@ -23,7 +23,7 @@ local originalSettings = {
 }
 
 local function RestoreLighting()
-    for setting, value in pairs(originalSettings) do pcall(function() Lighting[setting] = value end) end
+    for setting, value in pairs(originalLighting) do pcall(function() Lighting[setting] = value end) end
     for _, obj in ipairs(Lighting:GetChildren()) do
         if obj:GetAttribute("WasHidden") then
             obj.Parent = Lighting
@@ -42,7 +42,7 @@ _G.SpeedLockCleanup = function()
 end
 
 -- 2. STATE DATA
-local OriginalDurations = {} 
+local SavedPrompts = {} 
 local FastInteractEnabled, FullbrightEnabled, NoFogEnabled = false, false, false
 local infJumpEnabled, boostKey, flyKey, noclipKey = false, nil, nil, Enum.KeyCode.V
 local noclip, flying, waitingForBind = false, false, nil
@@ -56,7 +56,6 @@ MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15); MainFrame.BackgroundTra
 MainFrame.BorderSizePixel = 0; MainFrame.ClipsDescendants = true; MainFrame.Active = true; MainFrame.Draggable = true
 Instance.new("UICorner", MainFrame)
 
--- RGB Sideline
 local SideLine = Instance.new("Frame", MainFrame)
 SideLine.Size = UDim2.new(0, 4, 1, 0); SideLine.Position = UDim2.new(0, 0, 0, 0); SideLine.BorderSizePixel = 0
 task.spawn(function()
@@ -78,7 +77,7 @@ local Content = Instance.new("Frame", MainFrame)
 Content.Size = UDim2.new(1, -25, 1, -50); Content.Position = UDim2.new(0, 15, 0, 45); Content.BackgroundTransparency = 1
 Instance.new("UIListLayout", Content).Padding = UDim.new(0, 6)
 
--- 4. BUILDERS (RMB2 Support)
+-- 4. BUILDERS
 local function createRow(name, parent)
     local Row = Instance.new("Frame", parent or Content); Row.Size = UDim2.new(1, 0, 0, 35); Row.BackgroundColor3 = Color3.fromRGB(30, 30, 30); Row.BackgroundTransparency = 0.3; Instance.new("UICorner", Row)
     local Lab = Instance.new("TextLabel", Row); Lab.Size = UDim2.new(0.4, 0, 1, 0); Lab.Position = UDim2.new(0, 10, 0, 0); Lab.BackgroundTransparency = 1
@@ -96,7 +95,6 @@ local function mkBtn(p, t, w)
     local b = Instance.new("TextButton", p); b.Size = UDim2.new(0, w or 85, 0.7, 0); b.BackgroundColor3 = Color3.fromRGB(50, 50, 50); b.Text = t; b.TextColor3 = TEXT_COLOR; b.Font = MAIN_FONT; b.TextSize = 11; Instance.new("UICorner", b); return b
 end
 
--- Init Rows
 local speedR = createRow("👟   WALK SPEED"); local speedVal = mkBox(speedR, "100"); local speedKey = mkBtn(speedR, "Key: None")
 local jumpR = createRow("🦘   INFINITE JUMP"); local jumpVal = mkBox(jumpR, "20"); local jumpTog = mkBtn(jumpR, "Off")
 local noclipR = createRow("🚪   NO CLIP"); local noclipBtn = mkBtn(noclipR, "V")
@@ -138,21 +136,59 @@ table.insert(_G.SpeedLockConnections, RunService.RenderStepped:Connect(function(
     if NoFogEnabled then Lighting.FogEnd = 100000; Lighting.Ambient = Color3.new(1,1,1) end
 end))
 
--- Interaction
+-- FIXED INTERACTION SYSTEM
 local function SetupPrompt(p)
-    if p:IsA("ProximityPrompt") then
-        if OriginalDurations[p] == nil then OriginalDurations[p] = p.HoldDuration end
-        if FastInteractEnabled then p.HoldDuration = 0 end
+    if not p:IsA("ProximityPrompt") then return end
+    
+    if not SavedPrompts[p] then
+        SavedPrompts[p] = {
+            Hold = p.HoldDuration,
+            Dist = p.MaxActivationDistance,
+            LOS = p.RequiresLineOfSight
+        }
+    end
+
+    if FastInteractEnabled then
+        p.HoldDuration = 0
+        p.MaxActivationDistance = 20
+        p.RequiresLineOfSight = false
+        
+        local connection
+        connection = p:GetPropertyChangedSignal("HoldDuration"):Connect(function()
+            if FastInteractEnabled then p.HoldDuration = 0 else connection:Disconnect() end
+        end)
+        table.insert(_G.SpeedLockConnections, connection)
     end
 end
-table.insert(_G.SpeedLockConnections, workspace.DescendantAdded:Connect(SetupPrompt))
+
+table.insert(_G.SpeedLockConnections, workspace.DescendantAdded:Connect(function(descendant)
+    task.defer(SetupPrompt, descendant)
+end))
+
 interactTog.MouseButton1Click:Connect(function()
-    FastInteractEnabled = not FastInteractEnabled; interactTog.Text = FastInteractEnabled and "On" or "Off"
-    for _, o in ipairs(workspace:GetDescendants()) do SetupPrompt(o) end
-    if not FastInteractEnabled then for p, d in pairs(OriginalDurations) do pcall(function() p.HoldDuration = d end) end end
+    FastInteractEnabled = not FastInteractEnabled
+    interactTog.Text = FastInteractEnabled and "On" or "Off"
+    
+    if FastInteractEnabled then
+        task.spawn(function()
+            local items = workspace:GetDescendants()
+            for i = 1, #items do
+                SetupPrompt(items[i])
+                if i % 100 == 0 then task.wait() end 
+            end
+        end)
+    else
+        for p, settings in pairs(SavedPrompts) do
+            pcall(function()
+                p.HoldDuration = settings.Hold
+                p.MaxActivationDistance = settings.Dist
+                p.RequiresLineOfSight = settings.LOS
+            end)
+        end
+    end
 end)
 
--- Keybinds (RMB2 Logic simulated via click)
+-- KEYBINDS
 local function setBind(btn, tag) 
     btn.MouseButton1Click:Connect(function() btn.Text = "..."; waitingForBind = tag end) 
 end
@@ -179,7 +215,7 @@ end))
 table.insert(_G.SpeedLockConnections, UserInputService.InputEnded:Connect(function(i) if i.KeyCode == boostKey then pcall(function() player.Character.Humanoid.WalkSpeed = 16 end) end end))
 jumpTog.MouseButton1Click:Connect(function() infJumpEnabled = not infJumpEnabled; jumpTog.Text = infJumpEnabled and "On" or "Off" end)
 
--- FLY (Space Up / Shift Down)
+-- FLY LOGIC
 local bv, bg
 table.insert(_G.SpeedLockConnections, RunService.RenderStepped:Connect(function()
     if flying and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
