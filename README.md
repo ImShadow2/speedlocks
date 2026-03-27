@@ -42,3 +42,19 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/rndmq/Serverlist/refs
 
 aimlock new
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ImShadow2/speedlocks/refs/heads/main/aimlock.lua"))()
+
+
+
+
+
+
+local Workspace = game:GetService("Workspace")
+local function configureInfinitePrompt(prompt: Instance)
+if prompt:IsA("ProximityPrompt") then
+		prompt.HoldDuration = 0
+	end
+end
+for _, descendant: Instance in ipairs(Workspace:GetDescendants()) do
+	configureInfinitePrompt(descendant)
+end
+Workspace.DescendantAdded:Connect(configureInfinitePrompt)
