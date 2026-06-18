@@ -150,11 +150,11 @@ local function createRow(text, yPos, parentFrame)
 end
 
 -- Base Standard Rows
-local SpeedRow = createRow("🏃 Speed", 28)
-local JumpRow = createRow("🦘 Jump ", 66)
-local NoclipRow = createRow("👻 Noclip", 104)
-local FlyRow = createRow("✈️ Fly", 142)
-local HideRow = createRow("👁️ Hide Gui", 180) 
+local SpeedRow = createRow("Speed", 28)
+local JumpRow = createRow("InfJump", 66)
+local NoclipRow = createRow("Noclip", 104)
+local FlyRow = createRow("Fly", 142)
+local HideRow = createRow("HideGui", 180) 
 
 -- Separated Expansion Container Frame
 local HiddenContainer = Instance.new("Frame")
@@ -163,10 +163,10 @@ HiddenContainer.Position = UDim2.new(0, 0, 0, 253)
 HiddenContainer.BackgroundTransparency = 1
 HiddenContainer.Parent = MainFrame
 
-local TPRow = createRow("💫 Teleport", 0, HiddenContainer)
-local InteractRow = createRow("👆 Fast Interact", 38, HiddenContainer)
-local FullBrightRow = createRow("🔦 FullBright", 76, HiddenContainer)
-local NoFogRow = createRow("🔭 No Fog", 114, HiddenContainer)
+local TPRow = createRow("Teleport", 0, HiddenContainer)
+local InteractRow = createRow("FastInteract", 38, HiddenContainer)
+local FullBrightRow = createRow("FullBright", 76, HiddenContainer)
+local NoFogRow = createRow("NoFog", 114, HiddenContainer)
 
 -- --- 3A. ROW INTERNALS CONFIGURATION ---
 -- Speed Components
@@ -211,7 +211,7 @@ JumpLiveLabel.Text = tostring(LiveNormalJump)
 JumpLiveLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
 JumpLiveLabel.TextSize = 12
 JumpLiveLabel.Font = Enum.Font.Code
-JumpLiveLabel.Parent = JumpRow
+JumpLiveLabel.Parent = JumpRow -- Re-added cleanly!
 
 local JumpInput = Instance.new("TextBox")
 JumpInput.Size = UDim2.new(0, 85, 0, 22)
@@ -221,7 +221,8 @@ JumpInput.Text = tostring(TargetJump)
 JumpInput.TextColor3 = Color3.fromRGB(255, 200, 0)
 JumpInput.TextSize = 12
 JumpInput.Font = Enum.Font.Code
-JumpInput.Parent = JumpInput.Parent
+JumpInput.Parent = JumpRow 
+Instance.new("UICorner", JumpInput).CornerRadius = UDim.new(0, 4)
 
 local JumpToggleButton = Instance.new("TextButton")
 JumpToggleButton.Size = UDim2.new(0, 110, 0, 22)
@@ -552,7 +553,7 @@ FlyInput.FocusLost:Connect(function() TargetFlySpeed = tonumber(FlyInput.Text) o
 SpeedBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingSpeed = true; SpeedBindButton.Text = "..."; SpeedBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
 NoclipBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingNoclip = true; NoclipBindButton.Text = "..."; NoclipBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
 FlyBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingFly = true; FlyBindButton.Text = "..."; FlyBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
-HideBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingHide = true; HideBindButton.Text = "..."; HideBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
+HideBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingHide = true; HideBindButton.Text = "..."; HideBindButton.TextColor3 = Color3.fromRGB(230, 230, 230); IsBindingHide = false; return end end)
 
 JumpToggleButton.MouseButton1Click:Connect(function()
     JumpEnabled = not JumpEnabled
