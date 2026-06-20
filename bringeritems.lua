@@ -148,7 +148,7 @@ local UpBtn = Instance.new("TextButton")
 UpBtn.Size = UDim2.new(0, 28, 0, 24)
 UpBtn.Position = UDim2.new(1, -28, 0, 0)
 UpBtn.BackgroundColor3 = Color3.fromRGB(44, 44, 54)
-UpBtn.Text = "⌃"
+UpBtn.Text = "<<"
 UpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 UpBtn.Font = Enum.Font.SourceSansBold
 UpBtn.TextSize = 14
@@ -365,7 +365,7 @@ for i = 1, maxItems do
 	InBtn.Size = UDim2.new(0, 32, 0, 24)
 	InBtn.Position = UDim2.new(1, -36, 0.5, -12)
 	InBtn.BackgroundColor3 = Color3.fromRGB(46, 50, 62)
-	InBtn.Text = "➜"
+	InBtn.Text = ">>"
 	InBtn.TextColor3 = Color3.fromRGB(210, 210, 220)
 	InBtn.Font = Enum.Font.SourceSansBold
 	InBtn.TextSize = 12
@@ -530,18 +530,34 @@ local function refreshFinderPanel()
 	FindScroll.CanvasSize = UDim2.new(0, 0, 0, FindLayout.AbsoluteContentSize.Y)
 end
 
+-- FIXED SCANNERS: Fully handles the active workspace root as a true open container!
 DirectTrackWorkspaceBtn.MouseButton1Click:Connect(function()
-	if currentExplorerPath ~= workspace and currentExplorerPath.Parent then
-		local containerFolder = currentExplorerPath.Parent
-		local targetName = currentExplorerPath.Name
-		
+	local targetName = currentExplorerPath.Name
+	
+	-- ROOT WORKSPACE MATCHER: If paths label says workspace, track everything loose inside it!
+	if currentExplorerPath == workspace then
+		targetName = "Workspace Root"
+		if not folderPools[targetName] then
+			folderPools[targetName] = { workspace }
+			table.insert(selectedFolderNames, targetName)
+			activeBrings[targetName] = {}
+		end
+		activeShowFolder = targetName
+		refreshSelectedPathsPanel()
+		refreshBringerPanel()
+		return
+	end
+	
+	-- Standard Sub-Folder Multipool Scanning
+	local scanningParent = currentExplorerPath.Parent
+	if scanningParent then
 		if not folderPools[targetName] then
 			folderPools[targetName] = {}
 			table.insert(selectedFolderNames, targetName)
 			activeBrings[targetName] = {}
 		end
 		
-		for _, obj in ipairs(containerFolder:GetChildren()) do
+		for _, obj in ipairs(scanningParent:GetChildren()) do
 			if obj.Name == targetName then
 				local structureExists = false
 				for _, existingObj in ipairs(folderPools[targetName]) do
@@ -618,7 +634,7 @@ refreshBringerPanel = function()
 
 	local structuralSignatures = {}
 	for _, actualSubFolder in ipairs(folderPools[activeShowFolder]) do
-		if actualSubFolder and actualSubFolder.Parent then
+		if actualSubFolder then
 			
 			local resFolder = actualSubFolder:FindFirstChild("Resources")
 			if resFolder then
@@ -628,7 +644,7 @@ refreshBringerPanel = function()
 			end
 			
 			for _, item in ipairs(actualSubFolder:GetChildren()) do
-				if item.Name ~= "Resources" then
+				if item.Name ~= "Resources" and item ~= ScreenGui and not Players:GetPlayerFromCharacter(item) then
 					structuralSignatures[item.Name] = item.ClassName
 				end
 			end
@@ -766,7 +782,7 @@ task.spawn(function()
 				
 				if pools and folderBrings then
 					for _, subContainer in ipairs(pools) do
-						if subContainer and subContainer.Parent and subContainer ~= myChar then
+						if subContainer and subContainer ~= myChar then
 							
 							for chosenItemName, activeState in pairs(folderBrings) do
 								if activeState == true then
@@ -788,7 +804,6 @@ task.spawn(function()
 										end
 									end
 									
-									-- FIXED SYNTAX HERE: Correct loop iteration assignment
 									for _, targetItem in ipairs(itemsToBring) do
 										if targetItem and targetItem ~= myChar and not Players:GetPlayerFromCharacter(targetItem) then
 											local part = nil
