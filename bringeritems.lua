@@ -21,7 +21,12 @@ local activeBrings = {}
 local activeShowFolder = nil   
 local bringDistance = 5
 local maxItems = 35           
+
+-- Search Filter Texts
+local pathsSearchText = ""
+local poolSearchText = ""
 local bringSearchText = ""    
+local allListSearchText = ""
 
 -- Dynamic Instance Listener Remounters
 local activeChildAddedConn = nil
@@ -114,17 +119,17 @@ KillCorner.Parent = KillBtn
 -- CHROME TAB SELECTION MATRIX
 -------------------------------------------------------------------------------
 local TabButtons = {}
-local tabNames = { "Paths", "Pool", "Engine" }
+local tabNames = { "Paths", "Pool", "Engine", "All List" }
 
 for i, name in ipairs(tabNames) do
 	local TabBtn = Instance.new("TextButton")
-	TabBtn.Size = UDim2.new(0, 58, 1, -12)
-	TabBtn.Position = UDim2.new(0, (i - 1) * 62 + 8, 0, 6)
+	TabBtn.Size = UDim2.new(0, 48, 1, -12)
+	TabBtn.Position = UDim2.new(0, (i - 1) * 52 + 6, 0, 6)
 	TabBtn.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
 	TabBtn.Text = name
 	TabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	TabBtn.Font = Enum.Font.SourceSansBold
-	TabBtn.TextSize = 12
+	TabBtn.TextSize = 11
 	TabBtn.BorderSizePixel = 0
 	TabBtn.Parent = TabBar
 	
@@ -138,6 +143,8 @@ end
 -------------------------------------------------------------------------------
 -- SEPARATED ACTIVE CONTENT FRAMES
 -------------------------------------------------------------------------------
+
+-- TAB 1: PATHS
 local Col1Frame = Instance.new("Frame")
 Col1Frame.Size = UDim2.new(1, -16, 1, -52)
 Col1Frame.Position = UDim2.new(0, 8, 0, 46)
@@ -179,34 +186,66 @@ FindPathLabel.TextSize = 11
 FindPathLabel.TextXAlignment = Enum.TextXAlignment.Left
 FindPathLabel.Parent = FindPathScroller
 
-local FindScroll = Instance.new("ScrollingFrame")
-FindScroll.Size = UDim2.new(1, 0, 1, -32)
-FindScroll.Position = UDim2.new(0, 0, 0, 32)
-FindScroll.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
-FindScroll.BorderSizePixel = 0
-FindScroll.ScrollBarThickness = 2
-FindScroll.Parent = Col1Frame
-
-local FindLayout = Instance.new("UIListLayout")
-FindLayout.SortOrder = Enum.SortOrder.LayoutOrder
-FindLayout.Padding = UDim.new(0, 4)
-FindLayout.Parent = FindScroll
+local TrackBtnBar = Instance.new("Frame")
+TrackBtnBar.Size = UDim2.new(1, 0, 0, 28)
+TrackBtnBar.Position = UDim2.new(0, 0, 0, 30)
+TrackBtnBar.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+TrackBtnBar.BorderSizePixel = 0
+TrackBtnBar.Parent = Col1Frame
 
 local DirectTrackWorkspaceBtn = Instance.new("TextButton")
-DirectTrackWorkspaceBtn.Size = UDim2.new(1, -4, 0, 28)
+DirectTrackWorkspaceBtn.Size = UDim2.new(1, 0, 1, 0)
 DirectTrackWorkspaceBtn.BackgroundColor3 = Color3.fromRGB(35, 60, 95)
 DirectTrackWorkspaceBtn.Text = "🎯 Track Selected Container Folder"
 DirectTrackWorkspaceBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 DirectTrackWorkspaceBtn.Font = Enum.Font.SourceSansBold
 DirectTrackWorkspaceBtn.TextSize = 12
 DirectTrackWorkspaceBtn.BorderSizePixel = 0
-DirectTrackWorkspaceBtn.LayoutOrder = 0
-DirectTrackWorkspaceBtn.Parent = FindScroll
+DirectTrackWorkspaceBtn.Parent = TrackBtnBar
 
 local DTWCorner = Instance.new("UICorner")
 DTWCorner.CornerRadius = UDim.new(0, 4)
 DTWCorner.Parent = DirectTrackWorkspaceBtn
 
+local PathsFilterBar = Instance.new("Frame")
+PathsFilterBar.Size = UDim2.new(1, 0, 0, 28)
+PathsFilterBar.Position = UDim2.new(0, 0, 0, 62)
+PathsFilterBar.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+PathsFilterBar.BorderSizePixel = 0
+PathsFilterBar.Parent = Col1Frame
+
+local PathsFilterCorner = Instance.new("UICorner")
+PathsFilterCorner.CornerRadius = UDim.new(0, 4)
+PathsFilterCorner.Parent = PathsFilterBar
+
+local PathsSearchInput = Instance.new("TextBox")
+PathsSearchInput.Size = UDim2.new(1, -10, 1, -4)
+PathsSearchInput.Position = UDim2.new(0, 5, 0, 2)
+PathsSearchInput.BackgroundTransparency = 1
+PathsSearchInput.Text = ""
+PathsSearchInput.PlaceholderText = "🔍 Search Filter..."
+PathsSearchInput.PlaceholderColor3 = Color3.fromRGB(110, 110, 125)
+PathsSearchInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+PathsSearchInput.Font = Enum.Font.SourceSans
+PathsSearchInput.TextSize = 12
+PathsSearchInput.TextXAlignment = Enum.TextXAlignment.Left
+PathsSearchInput.Parent = PathsFilterBar
+
+local FindScroll = Instance.new("ScrollingFrame")
+FindScroll.Size = UDim2.new(1, 0, 1, -94)
+FindScroll.Position = UDim2.new(0, 0, 0, 94)
+FindScroll.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+FindScroll.BorderSizePixel = 0
+FindScroll.ScrollBarThickness = 2
+FindScroll.Parent = Col1Frame
+
+local FindLayout = Instance.new("UIListLayout")
+FindLayout.SortOrder = Enum.SortOrder.Name
+FindLayout.Padding = UDim.new(0, 4)
+FindLayout.Parent = FindScroll
+
+
+-- TAB 2: POOL
 local Col2Frame = Instance.new("Frame")
 Col2Frame.Size = UDim2.new(1, -16, 1, -52)
 Col2Frame.Position = UDim2.new(0, 8, 0, 46)
@@ -214,18 +253,45 @@ Col2Frame.BackgroundTransparency = 1
 Col2Frame.Visible = false
 Col2Frame.Parent = MainWindow
 
+local PoolFilterBar = Instance.new("Frame")
+PoolFilterBar.Size = UDim2.new(1, 0, 0, 28)
+PoolFilterBar.Position = UDim2.new(0, 0, 0, 0)
+PoolFilterBar.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+PoolFilterBar.BorderSizePixel = 0
+PoolFilterBar.Parent = Col2Frame
+
+local PoolFilterCorner = Instance.new("UICorner")
+PoolFilterCorner.CornerRadius = UDim.new(0, 4)
+PoolFilterCorner.Parent = PoolFilterBar
+
+local PoolSearchInput = Instance.new("TextBox")
+PoolSearchInput.Size = UDim2.new(1, -10, 1, -4)
+PoolSearchInput.Position = UDim2.new(0, 5, 0, 2)
+PoolSearchInput.BackgroundTransparency = 1
+PoolSearchInput.Text = ""
+PoolSearchInput.PlaceholderText = "🔍 Search Filter..."
+PoolSearchInput.PlaceholderColor3 = Color3.fromRGB(110, 110, 125)
+PoolSearchInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+PoolSearchInput.Font = Enum.Font.SourceSans
+PoolSearchInput.TextSize = 12
+PoolSearchInput.TextXAlignment = Enum.TextXAlignment.Left
+PoolSearchInput.Parent = PoolFilterBar
+
 local SelectScroll = Instance.new("ScrollingFrame")
-SelectScroll.Size = UDim2.new(1, 0, 1, 0)
+SelectScroll.Size = UDim2.new(1, 0, 1, -32)
+SelectScroll.Position = UDim2.new(0, 0, 0, 32)
 SelectScroll.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
 SelectScroll.BorderSizePixel = 0
 SelectScroll.ScrollBarThickness = 2
 SelectScroll.Parent = Col2Frame
 
 local SelectLayout = Instance.new("UIListLayout")
-SelectLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SelectLayout.SortOrder = Enum.SortOrder.Name
 SelectLayout.Padding = UDim.new(0, 4)
 SelectLayout.Parent = SelectScroll
 
+
+-- TAB 3: ENGINE
 local Col3Frame = Instance.new("Frame")
 Col3Frame.Size = UDim2.new(1, -16, 1, -52)
 Col3Frame.Position = UDim2.new(0, 8, 0, 46)
@@ -269,7 +335,7 @@ SearchInput.Size = UDim2.new(1, -10, 1, -4)
 SearchInput.Position = UDim2.new(0, 5, 0, 2)
 SearchInput.BackgroundTransparency = 1
 SearchInput.Text = ""
-SearchInput.PlaceholderText = "🔍 Filter Combined Items (e.g. Plank)..."
+SearchInput.PlaceholderText = "🔍 Search Filter..."
 SearchInput.PlaceholderColor3 = Color3.fromRGB(110, 110, 125)
 SearchInput.TextColor3 = Color3.fromRGB(255, 255, 255)
 SearchInput.Font = Enum.Font.SourceSans
@@ -327,17 +393,132 @@ BringLayout.SortOrder = Enum.SortOrder.Name
 BringLayout.Padding = UDim.new(0, 4)
 BringLayout.Parent = BringScroll
 
+
+-- TAB 4: ALL LIST
+local Col4Frame = Instance.new("Frame")
+Col4Frame.Size = UDim2.new(1, -16, 1, -52)
+Col4Frame.Position = UDim2.new(0, 8, 0, 46)
+Col4Frame.BackgroundTransparency = 1
+Col4Frame.Visible = false
+Col4Frame.Parent = MainWindow
+
+local AllListFilterBar = Instance.new("Frame")
+AllListFilterBar.Size = UDim2.new(1, -100, 0, 28)
+AllListFilterBar.Position = UDim2.new(0, 0, 0, 0)
+AllListFilterBar.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+AllListFilterBar.BorderSizePixel = 0
+AllListFilterBar.Parent = Col4Frame
+
+local AllListFilterCorner = Instance.new("UICorner")
+AllListFilterCorner.CornerRadius = UDim.new(0, 4)
+AllListFilterCorner.Parent = AllListFilterBar
+
+local AllListSearchInput = Instance.new("TextBox")
+AllListSearchInput.Size = UDim2.new(1, -10, 1, -4)
+AllListSearchInput.Position = UDim2.new(0, 5, 0, 2)
+AllListSearchInput.BackgroundTransparency = 1
+AllListSearchInput.Text = ""
+AllListSearchInput.PlaceholderText = "🔍 Search Filter..."
+AllListSearchInput.PlaceholderColor3 = Color3.fromRGB(110, 110, 125)
+AllListSearchInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+AllListSearchInput.Font = Enum.Font.SourceSans
+AllListSearchInput.TextSize = 12
+AllListSearchInput.TextXAlignment = Enum.TextXAlignment.Left
+AllListSearchInput.Parent = AllListFilterBar
+
+local ApplyAllOffBtn = Instance.new("TextButton")
+ApplyAllOffBtn.Size = UDim2.new(0, 92, 0, 28)
+ApplyAllOffBtn.Position = UDim2.new(1, -92, 0, 0)
+ApplyAllOffBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 45)
+ApplyAllOffBtn.Text = "Apply All Off"
+ApplyAllOffBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ApplyAllOffBtn.Font = Enum.Font.SourceSansBold
+ApplyAllOffBtn.TextSize = 12
+ApplyAllOffBtn.BorderSizePixel = 0
+ApplyAllOffBtn.Parent = Col4Frame
+
+local ApplyAllOffCorner = Instance.new("UICorner")
+ApplyAllOffCorner.CornerRadius = UDim.new(0, 4)
+ApplyAllOffCorner.Parent = ApplyAllOffBtn
+
+local AllListScroll = Instance.new("ScrollingFrame")
+AllListScroll.Size = UDim2.new(1, 0, 1, -34)
+AllListScroll.Position = UDim2.new(0, 0, 0, 34)
+AllListScroll.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+AllListScroll.BorderSizePixel = 0
+AllListScroll.ScrollBarThickness = 2
+AllListScroll.Parent = Col4Frame
+
+local AllListLayout = Instance.new("UIListLayout")
+AllListLayout.SortOrder = Enum.SortOrder.Name
+AllListLayout.Padding = UDim.new(0, 4)
+AllListLayout.Parent = AllListScroll
+
+-------------------------------------------------------------------------------
+-- ARE YOU SURE? CONFIRMATION MODAL DIALOG
+-------------------------------------------------------------------------------
+local ConfirmModal = Instance.new("Frame")
+ConfirmModal.Size = UDim2.new(0, 220, 0, 110)
+ConfirmModal.Position = UDim2.new(0.5, -110, 0.5, -55)
+ConfirmModal.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+ConfirmModal.BorderSizePixel = 0
+ConfirmModal.Visible = false
+ConfirmModal.ZIndex = 10
+ConfirmModal.Parent = MainWindow
+
+local ConfirmCorner = Instance.new("UICorner")
+ConfirmCorner.CornerRadius = UDim.new(0, 6)
+ConfirmCorner.Parent = ConfirmModal
+
+local ConfirmStroke = Instance.new("UIStroke")
+ConfirmStroke.Color = Color3.fromRGB(180, 60, 60)
+ConfirmStroke.Thickness = 1.5
+ConfirmStroke.Parent = ConfirmModal
+
+local ConfirmTitle = Instance.new("TextLabel")
+ConfirmTitle.Size = UDim2.new(1, 0, 0, 45)
+ConfirmTitle.BackgroundTransparency = 1
+ConfirmTitle.Text = "Are you sure?"
+ConfirmTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+ConfirmTitle.Font = Enum.Font.SourceSansBold
+ConfirmTitle.TextSize = 16
+ConfirmTitle.ZIndex = 10
+ConfirmTitle.Parent = ConfirmModal
+
+local YesBtn = Instance.new("TextButton")
+YesBtn.Size = UDim2.new(0, 80, 0, 30)
+YesBtn.Position = UDim2.new(0.5, -85, 0, 60)
+YesBtn.BackgroundColor3 = Color3.fromRGB(45, 120, 65)
+YesBtn.Text = "Yes"
+YesBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+YesBtn.Font = Enum.Font.SourceSansBold
+YesBtn.TextSize = 13
+YesBtn.ZIndex = 10
+YesBtn.Parent = ConfirmModal
+Instance.new("UICorner", YesBtn).CornerRadius = UDim.new(0, 4)
+
+local NoBtn = Instance.new("TextButton")
+NoBtn.Size = UDim2.new(0, 80, 0, 30)
+NoBtn.Position = UDim2.new(0.5, 5, 0, 60)
+NoBtn.BackgroundColor3 = Color3.fromRGB(130, 45, 45)
+NoBtn.Text = "No"
+NoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+NoBtn.Font = Enum.Font.SourceSansBold
+NoBtn.TextSize = 13
+NoBtn.ZIndex = 10
+NoBtn.Parent = ConfirmModal
+Instance.new("UICorner", NoBtn).CornerRadius = UDim.new(0, 4)
+
 -------------------------------------------------------------------------------
 -- FIXED STATIC MEMORY ARRAYS CORES
 -------------------------------------------------------------------------------
-local finderRows, selectRows, bringerRows = {}, {}, {}
+local finderRows, selectRows, bringerRows, allListRows = {}, {}, {}, {}
 
 for i = 1, maxItems do
 	local Row = Instance.new("Frame")
 	Row.Size = UDim2.new(1, -4, 0, 32)
 	Row.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
 	Row.BorderSizePixel = 0
-	Row.LayoutOrder = i
 	Row.Visible = false
 	Row.Parent = FindScroll
 
@@ -383,7 +564,6 @@ for i = 1, maxItems do
 	Row.Size = UDim2.new(1, -4, 0, 32)
 	Row.BackgroundColor3 = Color3.fromRGB(26, 28, 34)
 	Row.BorderSizePixel = 0
-	Row.LayoutOrder = i
 	Row.Visible = false
 	Row.Parent = SelectScroll
 
@@ -429,7 +609,6 @@ for i = 1, maxItems do
 	Row.Size = UDim2.new(1, -4, 0, 32)
 	Row.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
 	Row.BorderSizePixel = 0
-	Row.LayoutOrder = i
 	Row.Visible = false
 	Row.Parent = BringScroll
 
@@ -458,11 +637,45 @@ for i = 1, maxItems do
 	bringerRows[i] = { Row = Row, Label = Label, BringBtn = BringBtn, Conn1 = nil }
 end
 
+for i = 1, maxItems do
+	local Row = Instance.new("Frame")
+	Row.Size = UDim2.new(1, -4, 0, 32)
+	Row.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
+	Row.BorderSizePixel = 0
+	Row.Visible = false
+	Row.Parent = AllListScroll
+
+	local Label = Instance.new("TextLabel")
+	Label.Size = UDim2.new(1, -90, 1, 0)
+	Label.Position = UDim2.new(0, 10, 0, 0)
+	Label.BackgroundTransparency = 1
+	Label.TextColor3 = Color3.fromRGB(245, 245, 250)
+	Label.Font = Enum.Font.SourceSans
+	Label.TextSize = 13
+	Label.TextXAlignment = Enum.TextXAlignment.Left
+	Label.Parent = Row
+
+	local BringBtn = Instance.new("TextButton")
+	BringBtn.Size = UDim2.new(0, 72, 0, 24)
+	BringBtn.Position = UDim2.new(1, -76, 0.5, -12)
+	BringBtn.Text = "Bring Match"
+	BringBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	BringBtn.Font = Enum.Font.SourceSansBold
+	BringBtn.TextSize = 11
+	BringBtn.Parent = Row
+
+	Instance.new("UICorner", Row).CornerRadius = UDim.new(0, 4)
+	Instance.new("UICorner", BringBtn).CornerRadius = UDim.new(0, 4)
+
+	allListRows[i] = { Row = Row, Label = Label, BringBtn = BringBtn, Conn1 = nil }
+end
+
 -------------------------------------------------------------------------------
 -- ENGINE FUNCTIONS
 -------------------------------------------------------------------------------
 local refreshSelectedPathsPanel
 local refreshBringerPanel
+local refreshAllListPanel
 
 local function refreshFinderPanel()
 	FindPathLabel.Text = currentExplorerPath:GetFullName()
@@ -472,21 +685,25 @@ local function refreshFinderPanel()
 	local uniqueNames = {}
 	local filteredChildren = {}
 
-	-- Unique Filter to make sure identical folder names collapse on screen
 	for _, child in ipairs(children) do
 		if child ~= ScreenGui and child ~= LocalPlayer.Character and not Players:GetPlayerFromCharacter(child) then
 			if not uniqueNames[child.Name] then
-				uniqueNames[child.Name] = true
-				table.insert(filteredChildren, child)
+				if pathsSearchText == "" or string.find(string.lower(child.Name), string.lower(pathsSearchText)) then
+					uniqueNames[child.Name] = true
+					table.insert(filteredChildren, child)
+				end
 			end
 		end
 	end
+	
+	table.sort(filteredChildren, function(a, b) return a.Name:lower() < b.Name:lower() end)
 
 	local index = 1
 	for _, child in ipairs(filteredChildren) do
 		if index > maxItems then break end
 		local row = finderRows[index]
 		row.Row.Visible = true
+		row.Row.Name = child.Name
 		row.Label.Text = child.Name .. " (Smart Combined)"
 
 		if row.Conn1 then row.Conn1:Disconnect() end
@@ -494,6 +711,8 @@ local function refreshFinderPanel()
 
 		row.Conn1 = row.InBtn.MouseButton1Click:Connect(function()
 			currentExplorerPath = child
+			pathsSearchText = ""
+			PathsSearchInput.Text = ""
 			refreshFinderPanel()
 		end)
 
@@ -524,17 +743,16 @@ local function refreshFinderPanel()
 			if not activeShowFolder then activeShowFolder = targetName end
 			refreshSelectedPathsPanel()
 			refreshBringerPanel()
+			refreshAllListPanel()
 		end)
 		index = index + 1
 	end
 	FindScroll.CanvasSize = UDim2.new(0, 0, 0, FindLayout.AbsoluteContentSize.Y)
 end
 
--- FIXED SCANNERS: Fully handles the active workspace root as a true open container!
 DirectTrackWorkspaceBtn.MouseButton1Click:Connect(function()
 	local targetName = currentExplorerPath.Name
 	
-	-- ROOT WORKSPACE MATCHER: If paths label says workspace, track everything loose inside it!
 	if currentExplorerPath == workspace then
 		targetName = "Workspace Root"
 		if not folderPools[targetName] then
@@ -545,10 +763,10 @@ DirectTrackWorkspaceBtn.MouseButton1Click:Connect(function()
 		activeShowFolder = targetName
 		refreshSelectedPathsPanel()
 		refreshBringerPanel()
+		refreshAllListPanel()
 		return
 	end
 	
-	-- Standard Sub-Folder Multipool Scanning
 	local scanningParent = currentExplorerPath.Parent
 	if scanningParent then
 		if not folderPools[targetName] then
@@ -572,16 +790,26 @@ DirectTrackWorkspaceBtn.MouseButton1Click:Connect(function()
 		if not activeShowFolder then activeShowFolder = targetName end
 		refreshSelectedPathsPanel()
 		refreshBringerPanel()
+		refreshAllListPanel()
 	end
 end)
 
 refreshSelectedPathsPanel = function()
 	for i = 1, maxItems do selectRows[i].Row.Visible = false end
 
-	for index, folderName in ipairs(selectedFolderNames) do
+	local sortedNames = {}
+	for _, name in ipairs(selectedFolderNames) do
+		if poolSearchText == "" or string.find(string.lower(name), string.lower(poolSearchText)) then
+			table.insert(sortedNames, name)
+		end
+	end
+	table.sort(sortedNames, function(a, b) return a:lower() < b:lower() end)
+
+	for index, folderName in ipairs(sortedNames) do
 		if index > maxItems then break end
 		local row = selectRows[index]
 		row.Row.Visible = true
+		row.Row.Name = folderName
 		row.Label.Text = folderName .. " [Pooled Container]"
 		
 		if activeShowFolder == folderName then
@@ -600,7 +828,8 @@ refreshSelectedPathsPanel = function()
 		end)
 
 		row.Conn2 = row.DestroyBtn.MouseButton1Click:Connect(function()
-			table.remove(selectedFolderNames, index)
+			local origIndex = table.find(selectedFolderNames, folderName)
+			if origIndex then table.remove(selectedFolderNames, origIndex) end
 			folderPools[folderName] = nil
 			activeBrings[folderName] = nil
 			if activeShowFolder == folderName then
@@ -608,6 +837,7 @@ refreshSelectedPathsPanel = function()
 			end
 			refreshSelectedPathsPanel()
 			refreshBringerPanel()
+			refreshAllListPanel()
 		end)
 	end
 	SelectScroll.CanvasSize = UDim2.new(0, 0, 0, SelectLayout.AbsoluteContentSize.Y)
@@ -628,21 +858,19 @@ refreshBringerPanel = function()
 
 	local firstInstance = folderPools[activeShowFolder][1]
 	if firstInstance and firstInstance.Parent then
-		activeChildAddedConn = firstInstance.Parent.ChildAdded:Connect(function() task.defer(refreshBringerPanel) end)
-		activeChildRemovedConn = firstInstance.Parent.ChildRemoved:Connect(function() task.defer(refreshBringerPanel) end)
+		activeChildAddedConn = firstInstance.Parent.ChildAdded:Connect(function() task.defer(refreshBringerPanel) task.defer(refreshAllListPanel) end)
+		activeChildRemovedConn = firstInstance.Parent.ChildRemoved:Connect(function() task.defer(refreshBringerPanel) task.defer(refreshAllListPanel) end)
 	end
 
 	local structuralSignatures = {}
 	for _, actualSubFolder in ipairs(folderPools[activeShowFolder]) do
 		if actualSubFolder then
-			
 			local resFolder = actualSubFolder:FindFirstChild("Resources")
 			if resFolder then
 				for _, item in ipairs(resFolder:GetChildren()) do
 					structuralSignatures[item.Name] = item.ClassName
 				end
 			end
-			
 			for _, item in ipairs(actualSubFolder:GetChildren()) do
 				if item.Name ~= "Resources" and item ~= ScreenGui and not Players:GetPlayerFromCharacter(item) then
 					structuralSignatures[item.Name] = item.ClassName
@@ -651,37 +879,113 @@ refreshBringerPanel = function()
 		end
 	end
 
-	local index = 1
+	local sortedItems = {}
 	for itemName, className in pairs(structuralSignatures) do
-		if index > maxItems then break end
-		
 		if bringSearchText == "" or string.find(string.lower(itemName), string.lower(bringSearchText)) then
-			local row = bringerRows[index]
-			row.Row.Visible = true
-			row.Label.Text = itemName .. " [" .. className .. "]"
-
-			if row.Conn1 then row.Conn1:Disconnect() end
-
-			local folderBrings = activeBrings[activeShowFolder] or {}
-			
-			if folderBrings[itemName] then
-				row.BringBtn.BackgroundColor3 = Color3.fromRGB(50, 160, 90)
-				row.BringBtn.Text = "Bringing Match"
-			else
-				row.BringBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 62)
-				row.BringBtn.Text = "Bring All"
-			end
-
-			row.Conn1 = row.BringBtn.MouseButton1Click:Connect(function()
-				folderBrings[itemName] = not folderBrings[itemName]
-				activeBrings[activeShowFolder] = folderBrings
-				refreshBringerPanel()
-			end)
-			index = index + 1
+			table.insert(sortedItems, {Name = itemName, Class = className})
 		end
+	end
+	table.sort(sortedItems, function(a, b) return a.Name:lower() < b.Name:lower() end)
+
+	local index = 1
+	for _, data in ipairs(sortedItems) do
+		if index > maxItems then break end
+		local row = bringerRows[index]
+		row.Row.Visible = true
+		row.Row.Name = data.Name
+		row.Label.Text = data.Name .. " [" .. data.Class .. "]"
+
+		if row.Conn1 then row.Conn1:Disconnect() end
+
+		local folderBrings = activeBrings[activeShowFolder] or {}
+		
+		if folderBrings[data.Name] then
+			row.BringBtn.BackgroundColor3 = Color3.fromRGB(50, 160, 90)
+			row.BringBtn.Text = "Bringing Match"
+		else
+			row.BringBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 62)
+			row.BringBtn.Text = "Bring All"
+		end
+
+		row.Conn1 = row.BringBtn.MouseButton1Click:Connect(function()
+			folderBrings[data.Name] = not folderBrings[data.Name]
+			activeBrings[activeShowFolder] = folderBrings
+			refreshBringerPanel()
+			refreshAllListPanel()
+		end)
+		index = index + 1
 	end
 	BringScroll.CanvasSize = UDim2.new(0, 0, 0, BringLayout.AbsoluteContentSize.Y)
 end
+
+refreshAllListPanel = function()
+	for i = 1, maxItems do allListRows[i].Row.Visible = false end
+
+	local crossBrings = {}
+	for folderName, brings in pairs(activeBrings) do
+		for itemName, enabled in pairs(brings) do
+			if enabled then
+				if allListSearchText == "" or string.find(string.lower(itemName), string.lower(allListSearchText)) then
+					if not crossBrings[itemName] then
+						crossBrings[itemName] = { name = itemName, sourceFolders = { folderName } }
+					else
+						table.insert(crossBrings[itemName].sourceFolders, folderName)
+					end
+				end
+			end
+		end
+	end
+
+	local sortedCross = {}
+	for _, data in pairs(crossBrings) do table.insert(sortedCross, data) end
+	table.sort(sortedCross, function(a, b) return a.name:lower() < b.name:lower() end)
+
+	local index = 1
+	for _, data in ipairs(sortedCross) do
+		if index > maxItems then break end
+		local row = allListRows[index]
+		row.Row.Visible = true
+		row.Row.Name = data.name
+		row.Label.Text = data.name .. " (Active)"
+		row.BringBtn.BackgroundColor3 = Color3.fromRGB(50, 160, 90)
+
+		if row.Conn1 then row.Conn1:Disconnect() end
+		row.Conn1 = row.BringBtn.MouseButton1Click:Connect(function()
+			for _, fName in ipairs(data.sourceFolders) do
+				if activeBrings[fName] then
+					activeBrings[fName][data.name] = false
+				end
+			end
+			refreshBringerPanel()
+			refreshAllListPanel()
+		end)
+
+		index = index + 1
+	end
+	AllListScroll.CanvasSize = UDim2.new(0, 0, 0, AllListLayout.AbsoluteContentSize.Y)
+end
+
+-------------------------------------------------------------------------------
+-- MODAL INTERACTION LOGIC
+-------------------------------------------------------------------------------
+ApplyAllOffBtn.MouseButton1Click:Connect(function()
+	ConfirmModal.Visible = true
+end)
+
+NoBtn.MouseButton1Click:Connect(function()
+	ConfirmModal.Visible = false
+end)
+
+YesBtn.MouseButton1Click:Connect(function()
+	for folderName, brings in pairs(activeBrings) do
+		for itemName, _ in pairs(brings) do
+			brings[itemName] = false
+		end
+	end
+	ConfirmModal.Visible = false
+	refreshBringerPanel()
+	refreshAllListPanel()
+end)
 
 -------------------------------------------------------------------------------
 -- INTERFACE TAB SWITCH MATRIX
@@ -691,6 +995,7 @@ local function switchTab(tabIndex)
 	Col1Frame.Visible = (tabIndex == 1)
 	Col2Frame.Visible = (tabIndex == 2)
 	Col3Frame.Visible = (tabIndex == 3)
+	Col4Frame.Visible = (tabIndex == 4)
 
 	for i, btn in ipairs(TabButtons) do
 		if i == tabIndex then
@@ -712,14 +1017,35 @@ switchTab(1)
 -------------------------------------------------------------------------------
 -- UI CHANGE SIGNALS
 -------------------------------------------------------------------------------
+PathsSearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+	pathsSearchText = PathsSearchInput.Text
+	refreshFinderPanel()
+end)
+
+PoolSearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+	poolSearchText = PoolSearchInput.Text
+	refreshSelectedPathsPanel()
+end)
+
 SearchInput:GetPropertyChangedSignal("Text"):Connect(function()
 	bringSearchText = SearchInput.Text
 	refreshBringerPanel()
 end)
 
+AllListSearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+	allListSearchText = AllListSearchInput.Text
+	refreshAllListPanel()
+end)
+
+-- Dynamic Workspace Watchers: Updates when items spawn or drop into the hierarchy!
+workspace.ChildAdded:Connect(function() task.defer(refreshFinderPanel) end)
+workspace.ChildRemoved:Connect(function() task.defer(refreshFinderPanel) end)
+
 UpBtn.MouseButton1Click:Connect(function()
 	if currentExplorerPath ~= workspace and currentExplorerPath ~= game then
 		currentExplorerPath = currentExplorerPath.Parent or workspace
+		pathsSearchText = ""
+		PathsSearchInput.Text = ""
 		refreshFinderPanel()
 	end
 end)
@@ -764,9 +1090,10 @@ end)
 refreshFinderPanel()
 refreshSelectedPathsPanel()
 refreshBringerPanel()
+refreshAllListPanel()
 
 -------------------------------------------------------------------------------
--- DYNAMIC TELEPORT COMPLIANCE MULTI-OBJECT ENGINE LOOP
+-- RESPONDENT REAL-TIME MULTI-OBJECT ENGINE LOOP
 -------------------------------------------------------------------------------
 task.spawn(function()
 	while isRunning do
@@ -782,6 +1109,7 @@ task.spawn(function()
 				
 				if pools and folderBrings then
 					for _, subContainer in ipairs(pools) do
+						-- Dynamic Verification: Checks if a container folder was replaced or re-instanced
 						if subContainer and subContainer ~= myChar then
 							
 							for chosenItemName, activeState in pairs(folderBrings) do
