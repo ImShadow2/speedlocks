@@ -50,6 +50,8 @@ local SavedPosition = UDim2.new(0.05, 0, 0.2, 0)
 -- Visual Modifiers Config
 local FullBrightEnabled = false
 local NoFogEnabled = false
+
+-- Backup table to restore things when turned off or script killed
 local OriginalLighting = {
     Ambient = game:GetService("Lighting").Ambient,
     OutdoorAmbient = game:GetService("Lighting").OutdoorAmbient,
@@ -57,8 +59,19 @@ local OriginalLighting = {
     ColorShift_Bottom = game:GetService("Lighting").ColorShift_Bottom,
     ClockTime = game:GetService("Lighting").ClockTime,
     FogStart = game:GetService("Lighting").FogStart,
-    FogEnd = game:GetService("Lighting").FogEnd
+    FogEnd = game:GetService("Lighting").FogEnd,
+    Brightness = game:GetService("Lighting").Brightness,
+    GlobalShadows = game:GetService("Lighting").GlobalShadows,
+    ExposureCompensation = game:GetService("Lighting").ExposureCompensation,
+    SavedChildren = {} -- Stores copies of deleted lighting items to restore them later
 }
+
+-- Back up existing lighting elements so we don't break the game permanently
+for _, child in ipairs(game:GetService("Lighting"):GetChildren()) do
+    if child:IsA("PostEffect") or child:IsA("Atmosphere") or child:IsA("Sky") or child:IsA("Clouds") then
+        table.insert(OriginalLighting.SavedChildren, child:Clone())
+    end
+end
 
 local IsBindingSpeed = false
 local IsBindingNoclip = false
@@ -211,7 +224,7 @@ JumpLiveLabel.Text = tostring(LiveNormalJump)
 JumpLiveLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
 JumpLiveLabel.TextSize = 12
 JumpLiveLabel.Font = Enum.Font.Code
-JumpLiveLabel.Parent = JumpRow -- Re-added cleanly!
+JumpLiveLabel.Parent = JumpRow 
 
 local JumpInput = Instance.new("TextBox")
 JumpInput.Size = UDim2.new(0, 85, 0, 22)
@@ -466,21 +479,31 @@ task.spawn(function()
     end
 end)
 
--- Continuous Environment Visual Modifier Core Loop
+-- CONTINUOUS VISUAL MODIFIER INTEGRATION (FOR FULLBRIGHT + IMPROVED NO FOG)
 task.spawn(function()
     while ScriptRunning do
-        if FullBrightEnabled then
+        if NoFogEnabled then
+            -- Safely blow up fog atmospheric constraints/objects continuously
+            for _, child in ipairs(Lighting:GetChildren()) do
+                if child:IsA("Atmosphere") or child:IsA("Sky") or child:IsA("Clouds") or child:IsA("PostEffect") then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+            Lighting.FogEnd = 100000
+            Lighting.FogStart = 0
+            Lighting.ClockTime = 14
+            Lighting.Brightness = 2
+            Lighting.GlobalShadows = false
+            Lighting.ExposureCompensation = 0
+        elseif FullBrightEnabled then
+            -- Fallback standard Day Ambient fullbright if NoFog is inactive
             Lighting.Ambient = Color3.fromRGB(255, 255, 255)
             Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
             Lighting.ColorShift_Top = Color3.fromRGB(0, 0, 0)
             Lighting.ColorShift_Bottom = Color3.fromRGB(0, 0, 0)
             Lighting.ClockTime = 14
         end
-        if NoFogEnabled then
-            Lighting.FogStart = 0
-            Lighting.FogEnd = 999999
-        end
-        task.wait(1)
+        task.wait(0.1)
     end
 end)
 
@@ -505,7 +528,7 @@ ExpandButton.MouseButton1Click:Connect(function()
     TweenService:Create(ExpandButton, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 8, 0, buttonYPos)}):Play()
 end)
 
--- Unified Destroy Pipeline (Used by Kill Switch and Auto-Execution Replacements)
+-- Unified Destroy Pipeline (Restores environment defaults properly)
 local function cleanupActiveScript()
     ScriptRunning = false
     
@@ -519,7 +542,7 @@ local function cleanupActiveScript()
     end
     table.clear(PromptMemoryBank)
     
-    -- Restore lighting environments
+    -- Restore original engine lighting states completely
     pcall(function()
         Lighting.Ambient = OriginalLighting.Ambient
         Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
@@ -528,6 +551,14 @@ local function cleanupActiveScript()
         Lighting.ClockTime = OriginalLighting.ClockTime
         Lighting.FogStart = OriginalLighting.FogStart
         Lighting.FogEnd = OriginalLighting.FogEnd
+        Lighting.Brightness = OriginalLighting.Brightness
+        Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+        Lighting.ExposureCompensation = OriginalLighting.ExposureCompensation
+        
+        -- Put back deleted skies/atmospheres/fog objects
+        for _, clonedChild in ipairs(OriginalLighting.SavedChildren) do
+            clonedChild:Clone().Parent = Lighting
+        end
     end)
     
     -- Revert Speed values
@@ -541,7 +572,7 @@ end
 -- Wire the Kill Switch up
 KillButton.MouseButton1Click:Connect(cleanupActiveScript)
 
--- Bind cleanup into global memory bank so Solara execution checks can force access it next run
+-- Bind cleanup into global memory bank so execution checks can force access it next run
 _G.ProUtilityCleanup = cleanupActiveScript
 
 -- Input Focus Formats
@@ -553,7 +584,14 @@ FlyInput.FocusLost:Connect(function() TargetFlySpeed = tonumber(FlyInput.Text) o
 SpeedBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingSpeed = true; SpeedBindButton.Text = "..."; SpeedBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
 NoclipBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingNoclip = true; NoclipBindButton.Text = "..."; NoclipBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
 FlyBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingFly = true; FlyBindButton.Text = "..."; FlyBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
-HideBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingHide = true; HideBindButton.Text = "..."; HideBindButton.TextColor3 = Color3.fromRGB(230, 230, 230); IsBindingHide = false; return end end)
+
+HideBindButton.MouseButton1Click:Connect(function() 
+    if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then 
+        IsBindingHide = true; 
+        HideBindButton.Text = "..."; 
+        HideBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) 
+    end 
+end)
 
 JumpToggleButton.MouseButton1Click:Connect(function()
     JumpEnabled = not JumpEnabled
@@ -576,14 +614,35 @@ FullBrightToggleButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- No Fog Button Toggles
+-- Improved No Fog Button Toggles (Clears atmosphere and fully resets when deactivated)
 NoFogToggleButton.MouseButton1Click:Connect(function()
     NoFogEnabled = not NoFogEnabled
     NoFogToggleButton.Text = NoFogEnabled and "ON" or "OFF"
     NoFogToggleButton.TextColor3 = NoFogEnabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 75, 75)
+    
     if not NoFogEnabled then
-        Lighting.FogStart = OriginalLighting.FogStart
-        Lighting.FogEnd = OriginalLighting.FogEnd
+        -- Clear out everything and reload original skyboxes, atmospheres, etc.
+        for _, child in ipairs(Lighting:GetChildren()) do
+            if child:IsA("Atmosphere") or child:IsA("Sky") or child:IsA("Clouds") or child:IsA("PostEffect") then
+                pcall(function() child:Destroy() end)
+            end
+        end
+        pcall(function()
+            Lighting.Ambient = OriginalLighting.Ambient
+            Lighting.OutdoorAmbient = OriginalLighting.OutdoorAmbient
+            Lighting.ColorShift_Top = OriginalLighting.ColorShift_Top
+            Lighting.ColorShift_Bottom = OriginalLighting.ColorShift_Bottom
+            Lighting.ClockTime = OriginalLighting.ClockTime
+            Lighting.FogStart = OriginalLighting.FogStart
+            Lighting.FogEnd = OriginalLighting.FogEnd
+            Lighting.Brightness = OriginalLighting.Brightness
+            Lighting.GlobalShadows = OriginalLighting.GlobalShadows
+            Lighting.ExposureCompensation = OriginalLighting.ExposureCompensation
+            
+            for _, clonedChild in ipairs(OriginalLighting.SavedChildren) do
+                clonedChild:Clone().Parent = Lighting
+            end
+        end)
     end
 end)
 
@@ -663,7 +722,7 @@ local function toggleFly()
     end
 end
 
--- User Input Trigger Allocators (Including Smooth Slide Hide/Show System)
+-- User Input Trigger Allocators
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
     if UserInputService:GetFocusedTextBox() or not ScriptRunning then return end
 
