@@ -2030,4 +2030,4 @@ _G.AntigravityEspCleanup = function()
     print("Cleaned")
 end
 
-print("Your Ai shit menu is loaded!")
+print("Your Ai menu is loaded!")
