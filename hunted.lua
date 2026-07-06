@@ -1,3 +1,17 @@
+-- Premium Roblox Multi-ESP & Misc Script
+-- Features:
+--   1. Visuals Section:
+--      - Enemy ESP: Red Highlight (no fill) on ALL enemies in `workspace.Terrain.Enemies`
+--      - Shard ESP: Diamond billboards on ALL shards (Color-Coded, defaults to Violet)
+--      - Altar ESP: Cyan Highlight (no fill) on RingAltar
+--      - Portal ESP: Labeled billboards (Gray Entrance / Green Exit)
+--   2. Miscellaneous Section:
+--      - Avoid Enemy: Creates a customizable-stud "reverse magnet" forcefield around all enemies, forcing the player away.
+--      - NoClip: Toggleable NoClip with a bindable key (click keybind button to re-bind). Restores body collisions instantly upon disabling.
+--      - Shard TP: Hold-to-trigger teleportation to the nearest shard in `workspace.Shards` (re-bindable).
+--        * Infinite Chain-TP: Teleports to up to 20 shards IN A SINGLE FRAME (instant clearance of the entire map!).
+--   3. Clean Slate Engine: Checks _G for duplicate runs and cleans up all threads, connections, and GUIs.
+
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
@@ -2030,4 +2044,4 @@ _G.AntigravityEspCleanup = function()
     print("Cleaned")
 end
 
-print("Your Ai menu is loaded!")
+print("Menu Loaded")
