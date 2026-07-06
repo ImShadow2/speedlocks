@@ -1,3 +1,17 @@
+-- Premium Roblox Multi-ESP & Misc Script
+-- Features:
+--   1. Visuals Section:
+--      - Enemy ESP: Red Highlight (no fill) on ALL enemies in `workspace.Terrain.Enemies`
+--      - Shard ESP: Diamond billboards on ALL shards (Color-Coded, defaults to Violet)
+--      - Altar ESP: Cyan Highlight (no fill) on RingAltar
+--      - Portal ESP: Labeled billboards (Gray Entrance / Green Exit)
+--   2. Miscellaneous Section:
+--      - Avoid Enemy: Creates a customizable-stud "reverse magnet" forcefield around all enemies, forcing the player away.
+--      - NoClip: Toggleable NoClip with a bindable key (click keybind button to re-bind). Restores body collisions instantly upon disabling.
+--      - Shard TP: Hold-to-trigger teleportation to the nearest shard in `workspace.Shards` (re-bindable).
+--        * Infinite Chain-TP: Teleports to up to 20 shards IN A SINGLE FRAME (instant clearance of the entire map!).
+--   3. Clean Slate Engine: Checks _G for duplicate runs and cleans up all threads, connections, and GUIs.
+
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
@@ -63,6 +77,10 @@ local enemyEspEnabled = false
 local shardEspEnabled = false
 local altarEspEnabled = false
 local portalEspEnabled = false
+local playerEspEnabled = false
+local playerHighlights = {}
+local playerTags = {}
+local playerEspConnections = {}
 local avoidEnemyEnabled = false
 local avoidDistance = 15
 
@@ -80,6 +98,19 @@ local panelBindingActive = false
 
 local loopSpeedValue = 16
 local speedLoopConnection = nil
+
+local fullbrightEnabled = false
+local fullbrightConnection = nil
+local defaultLighting = {
+    Ambient = Color3.fromRGB(0, 0, 0),
+    ColorShift_Bottom = Color3.fromRGB(0, 0, 0),
+    ColorShift_Top = Color3.fromRGB(0, 0, 0),
+    FogEnd = 100000,
+    FogStart = 0,
+    ClockTime = 14,
+    Brightness = 2,
+    GlobalShadows = true,
+}
 
 local BLOCKED_KEYS = {
     [Enum.KeyCode.Escape] = true,
@@ -676,6 +707,154 @@ local function disablePortalEsp()
 end
 
 -- ==========================================
+-- PLAYER ESP FUNCTIONS (Green Highlights)
+-- ==========================================
+local playerAddedConn = nil
+local playerRemovingConn = nil
+
+local function highlightPlayer(player)
+    if player == localPlayer then return end
+    
+    local function onChar(char)
+        if not playerEspEnabled then return end
+        
+        -- Safely clean up any existing highlights/tags for this player
+        if playerHighlights[player] then
+            pcall(function() playerHighlights[player]:Destroy() end)
+            playerHighlights[player] = nil
+        end
+        if playerTags[player] then
+            pcall(function() playerTags[player]:Destroy() end)
+            playerTags[player] = nil
+        end
+        
+        -- Wait for character parts to load (essential in lobbies/spawns)
+        local rootPart = char:WaitForChild("HumanoidRootPart", 5)
+        local head = char:WaitForChild("Head", 5)
+        if not rootPart or not head then return end
+        if not playerEspEnabled then return end
+        
+        -- 1. Create Outline Highlight
+        local hl = Instance.new("Highlight")
+        hl.Name = "PlayerEspHighlight"
+        hl.FillTransparency = 1
+        hl.OutlineColor = Color3.fromRGB(0, 255, 0)
+        hl.OutlineTransparency = 0
+        hl.Adornee = char
+        hl.Parent = char -- Bind to character lifecycle
+        playerHighlights[player] = hl
+        
+        -- 2. Create Billboard Tag
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "PlayerEspBillboard"
+        billboard.Size = UDim2.new(0, 200, 0, 36)
+        billboard.StudsOffset = Vector3.new(0, 2.8, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Adornee = head
+        
+        -- Container label to hold the two lines of text
+        local container = Instance.new("Frame")
+        container.Size = UDim2.new(1, 0, 1, 0)
+        container.BackgroundTransparency = 1
+        container.Parent = billboard
+        
+        -- Line 1: DisplayName (@Username)
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = player.DisplayName .. " (@" .. player.Name .. ")"
+        nameLabel.TextColor3 = Color3.fromRGB(50, 255, 50) -- Vibrant green
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 9
+        nameLabel.Parent = container
+        
+        local nameStroke = Instance.new("UIStroke")
+        nameStroke.Color = Color3.fromRGB(0, 0, 0)
+        nameStroke.Thickness = 1.2
+        nameStroke.Parent = nameLabel
+        
+        -- Line 2: UserId
+        local idLabel = Instance.new("TextLabel")
+        idLabel.Size = UDim2.new(1, 0, 0.5, 0)
+        idLabel.Position = UDim2.new(0, 0, 0.5, 0)
+        idLabel.BackgroundTransparency = 1
+        idLabel.Text = "ID: " .. tostring(player.UserId)
+        idLabel.TextColor3 = Color3.fromRGB(150, 255, 150) -- Light green
+        idLabel.Font = Enum.Font.GothamBold
+        idLabel.TextSize = 8
+        idLabel.Parent = container
+        
+        local idStroke = Instance.new("UIStroke")
+        idStroke.Color = Color3.fromRGB(0, 0, 0)
+        idStroke.Thickness = 1.2
+        idStroke.Parent = idLabel
+        
+        billboard.Parent = char -- Bind to character lifecycle
+        playerTags[player] = billboard
+    end
+    
+    if player.Character then onChar(player.Character) end
+    
+    -- Disconnect old spawn listener if active
+    if playerEspConnections[player] then
+        playerEspConnections[player]:Disconnect()
+    end
+    playerEspConnections[player] = player.CharacterAdded:Connect(onChar)
+end
+
+local function enablePlayerEsp()
+    playerEspEnabled = true
+    for _, plr in ipairs(game:GetService("Players"):GetPlayers()) do
+        highlightPlayer(plr)
+    end
+    
+    if not playerAddedConn then
+        playerAddedConn = game:GetService("Players").PlayerAdded:Connect(function(plr)
+            if playerEspEnabled then
+                highlightPlayer(plr)
+            end
+        end)
+    end
+    if not playerRemovingConn then
+        playerRemovingConn = game:GetService("Players").PlayerRemoving:Connect(function(plr)
+            if playerHighlights[plr] then
+                pcall(function() playerHighlights[plr]:Destroy() end)
+                playerHighlights[plr] = nil
+            end
+            if playerTags[plr] then
+                pcall(function() playerTags[plr]:Destroy() end)
+                playerTags[plr] = nil
+            end
+            if playerEspConnections[plr] then
+                playerEspConnections[plr]:Disconnect()
+                playerEspConnections[plr] = nil
+            end
+        end)
+    end
+end
+
+local function disablePlayerEsp()
+    playerEspEnabled = false
+    if playerAddedConn then playerAddedConn:Disconnect() playerAddedConn = nil end
+    if playerRemovingConn then playerRemovingConn:Disconnect() playerRemovingConn = nil end
+    
+    for player, conn in pairs(playerEspConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    playerEspConnections = {}
+    
+    for player, hl in pairs(playerHighlights) do
+        pcall(function() hl:Destroy() end)
+    end
+    playerHighlights = {}
+    
+    for player, tag in pairs(playerTags) do
+        pcall(function() tag:Destroy() end)
+    end
+    playerTags = {}
+end
+
+-- ==========================================
 -- MISCELLANEOUS: AVOID ENEMY (Reverse Magnet)
 -- ==========================================
 local function enableAvoidEnemy()
@@ -856,6 +1035,55 @@ local function stopSpeedLoop()
     end
 end
 
+local function enableFullBright()
+    if fullbrightEnabled then return end
+    fullbrightEnabled = true
+    
+    local Lighting = game:GetService("Lighting")
+    defaultLighting.Ambient = Lighting.Ambient
+    defaultLighting.ColorShift_Bottom = Lighting.ColorShift_Bottom
+    defaultLighting.ColorShift_Top = Lighting.ColorShift_Top
+    defaultLighting.FogEnd = Lighting.FogEnd
+    defaultLighting.FogStart = Lighting.FogStart
+    defaultLighting.ClockTime = Lighting.ClockTime
+    defaultLighting.Brightness = Lighting.Brightness
+    defaultLighting.GlobalShadows = Lighting.GlobalShadows
+    
+    local function doFullBright()
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.ColorShift_Bottom = Color3.new(1, 1, 1)
+        Lighting.ColorShift_Top = Color3.new(1, 1, 1)
+        Lighting.FogEnd = 100000
+        Lighting.FogStart = 0
+        Lighting.ClockTime = 14
+        Lighting.Brightness = 2
+        Lighting.GlobalShadows = false
+    end
+    
+    doFullBright()
+    fullbrightConnection = Lighting.LightingChanged:Connect(doFullBright)
+end
+
+local function disableFullBright()
+    if not fullbrightEnabled then return end
+    fullbrightEnabled = false
+    
+    if fullbrightConnection then
+        fullbrightConnection:Disconnect()
+        fullbrightConnection = nil
+    end
+    
+    local Lighting = game:GetService("Lighting")
+    Lighting.Ambient = defaultLighting.Ambient
+    Lighting.ColorShift_Bottom = defaultLighting.ColorShift_Bottom
+    Lighting.ColorShift_Top = defaultLighting.ColorShift_Top
+    Lighting.FogEnd = defaultLighting.FogEnd
+    Lighting.FogStart = defaultLighting.FogStart
+    Lighting.ClockTime = defaultLighting.ClockTime
+    Lighting.Brightness = defaultLighting.Brightness
+    Lighting.GlobalShadows = defaultLighting.GlobalShadows
+end
+
 -- ==========================================
 -- BACKGROUND ROBUST SYNC LOOP
 -- ==========================================
@@ -952,7 +1180,7 @@ end)
 -- Main Frame (Draggable Container)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 288, 0, 420) -- Expanded to 288x420 to fit settings and sliders without overlap
+MainFrame.Size = UDim2.new(0, 288, 0, 474) -- Expanded to 474 height to align all rows including Player ESP
 MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = COLORS.Background
 MainFrame.BorderSizePixel = 0
@@ -969,6 +1197,52 @@ Stroke.Color = Color3.fromRGB(50, 50, 60)
 Stroke.Thickness = 1.5
 Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 Stroke.Parent = MainFrame
+
+-- Restore/Show Button (Floating menu button on the left edge when MainFrame is hidden)
+local RestoreButton = Instance.new("TextButton")
+RestoreButton.Name = "RestoreButton"
+RestoreButton.Size = UDim2.new(0, 36, 0, 36)
+RestoreButton.Position = UDim2.new(0, 10, 0.5, -18)
+RestoreButton.BackgroundColor3 = COLORS.Header
+RestoreButton.Text = "☰"
+RestoreButton.TextColor3 = COLORS.TextActive
+RestoreButton.Font = Enum.Font.GothamBold
+RestoreButton.TextSize = 14
+RestoreButton.AutoButtonColor = false
+RestoreButton.Visible = false
+RestoreButton.Parent = ScreenGui
+
+local RestoreCorner = Instance.new("UICorner")
+RestoreCorner.CornerRadius = UDim.new(0, 18)
+RestoreCorner.Parent = RestoreButton
+
+local RestoreStroke = Instance.new("UIStroke")
+RestoreStroke.Color = COLORS.PortalAccent
+RestoreStroke.Thickness = 1
+RestoreStroke.Parent = RestoreButton
+
+local function setPanelVisible(visible)
+    panelVisible = visible
+    MainFrame.Visible = visible
+    RestoreButton.Visible = not visible
+end
+
+RestoreButton.MouseEnter:Connect(function()
+    TweenService:Create(RestoreButton, TWEEN_INFO, { BackgroundColor3 = COLORS.ButtonHover }):Play()
+end)
+
+RestoreButton.MouseLeave:Connect(function()
+    TweenService:Create(RestoreButton, TWEEN_INFO, { BackgroundColor3 = COLORS.Header }):Play()
+end)
+
+RestoreButton.MouseButton1Down:Connect(function()
+    TweenService:Create(RestoreButton, TWEEN_INFO, { Size = UDim2.new(0, 32, 0, 32), Position = UDim2.new(0, 12, 0.5, -16) }):Play()
+end)
+
+RestoreButton.MouseButton1Up:Connect(function()
+    TweenService:Create(RestoreButton, TWEEN_INFO, { Size = UDim2.new(0, 36, 0, 36), Position = UDim2.new(0, 10, 0.5, -18) }):Play()
+    setPanelVisible(true)
+end)
 
 -- Header Bar
 local Header = Instance.new("Frame")
@@ -997,7 +1271,7 @@ Title.Position = UDim2.new(0, 12, 0, 0)
 Title.BackgroundTransparency = 1
 Title.Text = "ANTIGRAVITY CONTROL PANEL"
 Title.TextColor3 = COLORS.TextActive
-Title.TextSize = 10
+Title.TextSize = 11
 Title.Font = Enum.Font.GothamBold
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.Parent = Header
@@ -1031,7 +1305,7 @@ VisualsTitle.Position = UDim2.new(0, 12, 0, 8)
 VisualsTitle.BackgroundTransparency = 1
 VisualsTitle.Text = "VISUALS"
 VisualsTitle.TextColor3 = COLORS.TextMuted
-VisualsTitle.TextSize = 9
+VisualsTitle.TextSize = 11
 VisualsTitle.Font = Enum.Font.GothamBold
 VisualsTitle.TextXAlignment = Enum.TextXAlignment.Left
 VisualsTitle.Parent = Content
@@ -1046,7 +1320,7 @@ local function createRowLabel(text, positionOffset)
     label.Text = text
     label.TextColor3 = Color3.fromRGB(220, 220, 225)
     label.Font = Enum.Font.GothamBold
-    label.TextSize = 9
+    label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = Content
     return label
@@ -1065,7 +1339,7 @@ EnemyButton.BackgroundColor3 = COLORS.ToggleOff
 EnemyButton.Text = "OFF"
 EnemyButton.TextColor3 = COLORS.TextActive
 EnemyButton.Font = Enum.Font.GothamBold
-EnemyButton.TextSize = 9
+EnemyButton.TextSize = 11
 EnemyButton.AutoButtonColor = false
 EnemyButton.Parent = Content
 
@@ -1092,7 +1366,7 @@ ShardButton.BackgroundColor3 = COLORS.ToggleOff
 ShardButton.Text = "OFF"
 ShardButton.TextColor3 = COLORS.TextActive
 ShardButton.Font = Enum.Font.GothamBold
-ShardButton.TextSize = 9
+ShardButton.TextSize = 11
 ShardButton.AutoButtonColor = false
 ShardButton.Parent = Content
 
@@ -1119,7 +1393,7 @@ AltarButton.BackgroundColor3 = COLORS.ToggleOff
 AltarButton.Text = "OFF"
 AltarButton.TextColor3 = COLORS.TextActive
 AltarButton.Font = Enum.Font.GothamBold
-AltarButton.TextSize = 9
+AltarButton.TextSize = 11
 AltarButton.AutoButtonColor = false
 AltarButton.Parent = Content
 
@@ -1141,7 +1415,7 @@ AltarTpButton.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 AltarTpButton.Text = "TP"
 AltarTpButton.TextColor3 = COLORS.TextActive
 AltarTpButton.Font = Enum.Font.GothamBold
-AltarTpButton.TextSize = 10
+AltarTpButton.TextSize = 11
 AltarTpButton.AutoButtonColor = false
 AltarTpButton.Parent = Content
 
@@ -1168,7 +1442,7 @@ PortalButton.BackgroundColor3 = COLORS.ToggleOff
 PortalButton.Text = "OFF"
 PortalButton.TextColor3 = COLORS.TextActive
 PortalButton.Font = Enum.Font.GothamBold
-PortalButton.TextSize = 9
+PortalButton.TextSize = 11
 PortalButton.AutoButtonColor = false
 PortalButton.Parent = Content
 
@@ -1190,7 +1464,7 @@ PortalTpButton.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 PortalTpButton.Text = "TP"
 PortalTpButton.TextColor3 = COLORS.TextActive
 PortalTpButton.Font = Enum.Font.GothamBold
-PortalTpButton.TextSize = 10
+PortalTpButton.TextSize = 11
 PortalTpButton.AutoButtonColor = false
 PortalTpButton.Parent = Content
 
@@ -1204,11 +1478,185 @@ PortalTpStroke.Transparency = 0.85
 PortalTpStroke.Thickness = 1
 PortalTpStroke.Parent = PortalTpButton
 
+-- ==========================================
+-- ROW 5: Player ESP (offset 154)
+-- ==========================================
+createRowLabel("Player ESP", 154)
+
+local PlayerButton = Instance.new("TextButton")
+PlayerButton.Name = "PlayerButton"
+PlayerButton.Size = UDim2.new(0, 78, 0, 28)
+PlayerButton.Position = UDim2.new(0, 140, 0, 154)
+PlayerButton.BackgroundColor3 = COLORS.ToggleOff
+PlayerButton.Text = "OFF"
+PlayerButton.TextColor3 = COLORS.TextActive
+PlayerButton.Font = Enum.Font.GothamBold
+PlayerButton.TextSize = 11
+PlayerButton.AutoButtonColor = false
+PlayerButton.Parent = Content
+
+local PlayerCorner = Instance.new("UICorner")
+PlayerCorner.CornerRadius = UDim.new(0, 5)
+PlayerCorner.Parent = PlayerButton
+
+local PlayerStroke = Instance.new("UIStroke")
+PlayerStroke.Color = Color3.fromRGB(255, 255, 255)
+PlayerStroke.Transparency = 0.88
+PlayerStroke.Thickness = 1
+PlayerStroke.Parent = PlayerButton
+
+local PlayerDropdownButton = Instance.new("TextButton")
+PlayerDropdownButton.Name = "PlayerDropdownButton"
+PlayerDropdownButton.Size = UDim2.new(0, 46, 0, 28)
+PlayerDropdownButton.Position = UDim2.new(0, 222, 0, 154)
+PlayerDropdownButton.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+PlayerDropdownButton.Text = "PLR ▼"
+PlayerDropdownButton.TextColor3 = COLORS.TextActive
+PlayerDropdownButton.Font = Enum.Font.GothamBold
+PlayerDropdownButton.TextSize = 11
+PlayerDropdownButton.AutoButtonColor = false
+PlayerDropdownButton.Parent = Content
+
+local PlayerDropdownCorner = Instance.new("UICorner")
+PlayerDropdownCorner.CornerRadius = UDim.new(0, 5)
+PlayerDropdownCorner.Parent = PlayerDropdownButton
+
+local PlayerDropdownStroke = Instance.new("UIStroke")
+PlayerDropdownStroke.Color = Color3.fromRGB(255, 255, 255)
+PlayerDropdownStroke.Transparency = 0.85
+PlayerDropdownStroke.Thickness = 1
+PlayerDropdownStroke.Parent = PlayerDropdownButton
+
+-- Dropdown Scrolling Frame Container
+local PlayerDropdownFrame = Instance.new("ScrollingFrame")
+PlayerDropdownFrame.Name = "PlayerDropdownFrame"
+PlayerDropdownFrame.Size = UDim2.new(0, 128, 0, 120)
+PlayerDropdownFrame.Position = UDim2.new(0, 140, 0, 184) -- sits directly below the Player ESP row, aligned to button block
+PlayerDropdownFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+PlayerDropdownFrame.BorderSizePixel = 0
+PlayerDropdownFrame.ZIndex = 10
+PlayerDropdownFrame.Visible = false
+PlayerDropdownFrame.ScrollBarThickness = 4
+PlayerDropdownFrame.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 90)
+PlayerDropdownFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+PlayerDropdownFrame.Parent = Content
+
+local DropdownCorner = Instance.new("UICorner")
+DropdownCorner.CornerRadius = UDim.new(0, 6)
+DropdownCorner.Parent = PlayerDropdownFrame
+
+local DropdownStroke = Instance.new("UIStroke")
+DropdownStroke.Color = COLORS.PortalAccent -- Green outline matching player highlight color
+DropdownStroke.Thickness = 1
+DropdownStroke.Parent = PlayerDropdownFrame
+
+local DropdownList = Instance.new("UIListLayout")
+DropdownList.SortOrder = Enum.SortOrder.LayoutOrder
+DropdownList.Padding = UDim.new(0, 2)
+DropdownList.Parent = PlayerDropdownFrame
+
+DropdownList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    PlayerDropdownFrame.CanvasSize = UDim2.new(0, 0, 0, DropdownList.AbsoluteContentSize.Y + 4)
+end)
+
+local dropdownOpen = false
+PlayerDropdownButton.MouseButton1Down:Connect(function()
+    TweenService:Create(PlayerDropdownButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 156) }):Play()
+end)
+
+PlayerDropdownButton.MouseButton1Up:Connect(function()
+    TweenService:Create(PlayerDropdownButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 154) }):Play()
+    dropdownOpen = not dropdownOpen
+    PlayerDropdownFrame.Visible = dropdownOpen
+    
+    if dropdownOpen then
+        -- Clear old items
+        for _, child in ipairs(PlayerDropdownFrame:GetChildren()) do
+            if child:IsA("TextButton") or child:IsA("TextLabel") then
+                child:Destroy()
+            end
+        end
+        
+        local count = 0
+        for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+            if player ~= localPlayer then
+                count = count + 1
+                local itemButton = Instance.new("TextButton")
+                itemButton.Size = UDim2.new(1, -6, 0, 36)
+                itemButton.BackgroundTransparency = 1
+                itemButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                itemButton.Text = ""
+                itemButton.ZIndex = 11
+                itemButton.Parent = PlayerDropdownFrame
+                
+                local itemCorner = Instance.new("UICorner")
+                itemCorner.CornerRadius = UDim.new(0, 4)
+                itemCorner.Parent = itemButton
+                
+                local userLabel = Instance.new("TextLabel")
+                userLabel.Size = UDim2.new(1, -16, 0.5, 0)
+                userLabel.Position = UDim2.new(0, 8, 0, 2)
+                userLabel.BackgroundTransparency = 1
+                userLabel.Text = player.Name
+                userLabel.TextColor3 = Color3.fromRGB(240, 240, 245)
+                userLabel.TextSize = 11
+                userLabel.Font = Enum.Font.GothamBold
+                userLabel.TextXAlignment = Enum.TextXAlignment.Left
+                userLabel.ZIndex = 12
+                userLabel.Parent = itemButton
+                
+                local nameLabel = Instance.new("TextLabel")
+                nameLabel.Size = UDim2.new(1, -16, 0.5, 0)
+                nameLabel.Position = UDim2.new(0, 8, 0.5, -2)
+                nameLabel.BackgroundTransparency = 1
+                nameLabel.Text = player.DisplayName
+                nameLabel.TextColor3 = COLORS.TextMuted
+                nameLabel.TextSize = 10
+                nameLabel.Font = Enum.Font.Gotham
+                nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+                nameLabel.ZIndex = 12
+                nameLabel.Parent = itemButton
+                
+                itemButton.MouseEnter:Connect(function()
+                    itemButton.BackgroundTransparency = 0.92
+                end)
+                itemButton.MouseLeave:Connect(function()
+                    itemButton.BackgroundTransparency = 1
+                end)
+                
+                itemButton.MouseButton1Click:Connect(function()
+                    dropdownOpen = false
+                    PlayerDropdownFrame.Visible = false
+                    local char = player.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    local myChar = localPlayer.Character
+                    local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
+                    if root and myRoot then
+                        myRoot.CFrame = root.CFrame + Vector3.new(0, 3, 0)
+                    end
+                end)
+            end
+        end
+        
+        if count == 0 then
+            local noPlrLabel = Instance.new("TextLabel")
+            noPlrLabel.Size = UDim2.new(1, 0, 0, 30)
+            noPlrLabel.BackgroundTransparency = 1
+            noPlrLabel.Text = "No other players"
+            noPlrLabel.TextColor3 = COLORS.TextMuted
+            noPlrLabel.TextSize = 11
+            noPlrLabel.Font = Enum.Font.GothamBold
+            noPlrLabel.ZIndex = 11
+            noPlrLabel.Parent = PlayerDropdownFrame
+        end
+    end
+end)
+
 -- Divider Line
 local Divider = Instance.new("Frame")
 Divider.Name = "Divider"
 Divider.Size = UDim2.new(1, -24, 0, 1)
-Divider.Position = UDim2.new(0, 12, 0, 158)
+Divider.Position = UDim2.new(0, 12, 0, 190)
 Divider.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 Divider.BorderSizePixel = 0
 Divider.Parent = Content
@@ -1217,29 +1665,29 @@ Divider.Parent = Content
 local MiscTitle = Instance.new("TextLabel")
 MiscTitle.Name = "MiscTitle"
 MiscTitle.Size = UDim2.new(1, -24, 0, 14)
-MiscTitle.Position = UDim2.new(0, 12, 0, 166)
+MiscTitle.Position = UDim2.new(0, 12, 0, 198)
 MiscTitle.BackgroundTransparency = 1
 MiscTitle.Text = "MISCELLANEOUS"
 MiscTitle.TextColor3 = COLORS.TextMuted
-MiscTitle.TextSize = 9
+MiscTitle.TextSize = 11
 MiscTitle.Font = Enum.Font.GothamBold
 MiscTitle.TextXAlignment = Enum.TextXAlignment.Left
 MiscTitle.Parent = Content
 
 -- ==========================================
--- ROW 5: Avoid Enemy (offset 184)
+-- ROW 6: Avoid Enemy (offset 216)
 -- ==========================================
-createRowLabel("Avoid Enemy", 184)
+createRowLabel("Avoid Enemy", 216)
 
 local AvoidButton = Instance.new("TextButton")
 AvoidButton.Name = "AvoidButton"
 AvoidButton.Size = UDim2.new(0, 78, 0, 28)
-AvoidButton.Position = UDim2.new(0, 140, 0, 184)
+AvoidButton.Position = UDim2.new(0, 140, 0, 216)
 AvoidButton.BackgroundColor3 = COLORS.ToggleOff
 AvoidButton.Text = "OFF"
 AvoidButton.TextColor3 = COLORS.TextActive
 AvoidButton.Font = Enum.Font.GothamBold
-AvoidButton.TextSize = 9
+AvoidButton.TextSize = 11
 AvoidButton.AutoButtonColor = false
 AvoidButton.Parent = Content
 
@@ -1256,13 +1704,13 @@ AvoidStroke.Parent = AvoidButton
 local AvoidTextBox = Instance.new("TextBox")
 AvoidTextBox.Name = "AvoidTextBox"
 AvoidTextBox.Size = UDim2.new(0, 46, 0, 28)
-AvoidTextBox.Position = UDim2.new(0, 222, 0, 184)
+AvoidTextBox.Position = UDim2.new(0, 222, 0, 216)
 AvoidTextBox.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 AvoidTextBox.Text = tostring(avoidDistance)
 AvoidTextBox.TextColor3 = COLORS.TextActive
 AvoidTextBox.PlaceholderText = ""
 AvoidTextBox.Font = Enum.Font.GothamBold
-AvoidTextBox.TextSize = 10
+AvoidTextBox.TextSize = 11
 AvoidTextBox.ClearTextOnFocus = true
 AvoidTextBox.Parent = Content
 
@@ -1286,19 +1734,19 @@ AvoidTextBox.FocusLost:Connect(function(enterPressed)
 end)
 
 -- ==========================================
--- ROW 6: NoClip (offset 218)
+-- ROW 7: NoClip (offset 248)
 -- ==========================================
-createRowLabel("NoClip", 218)
+createRowLabel("NoClip", 248)
 
 local NoClipButton = Instance.new("TextButton")
 NoClipButton.Name = "NoClipButton"
 NoClipButton.Size = UDim2.new(0, 78, 0, 28)
-NoClipButton.Position = UDim2.new(0, 140, 0, 218)
+NoClipButton.Position = UDim2.new(0, 140, 0, 248)
 NoClipButton.BackgroundColor3 = COLORS.ToggleOff
 NoClipButton.Text = "OFF"
 NoClipButton.TextColor3 = COLORS.TextActive
 NoClipButton.Font = Enum.Font.GothamBold
-NoClipButton.TextSize = 9
+NoClipButton.TextSize = 11
 NoClipButton.AutoButtonColor = false
 NoClipButton.Parent = Content
 
@@ -1315,12 +1763,12 @@ NoclipStroke.Parent = NoClipButton
 local KeybindButton = Instance.new("TextButton")
 KeybindButton.Name = "KeybindButton"
 KeybindButton.Size = UDim2.new(0, 46, 0, 28)
-KeybindButton.Position = UDim2.new(0, 222, 0, 218)
+KeybindButton.Position = UDim2.new(0, 222, 0, 248)
 KeybindButton.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 KeybindButton.Text = noclipKeybind.Name:upper()
 KeybindButton.TextColor3 = COLORS.TextActive
 KeybindButton.Font = Enum.Font.GothamBold
-KeybindButton.TextSize = 10
+KeybindButton.TextSize = 11
 KeybindButton.AutoButtonColor = false
 KeybindButton.Parent = Content
 
@@ -1335,19 +1783,19 @@ KeybindStroke.Thickness = 1
 KeybindStroke.Parent = KeybindButton
 
 -- ==========================================
--- ROW 7: Shard TP (offset 252)
+-- ROW 8: Shard TP (offset 280)
 -- ==========================================
-createRowLabel("Shard TP", 252)
+createRowLabel("Shard TP", 280)
 
 local TpButton = Instance.new("TextButton")
 TpButton.Name = "TpButton"
 TpButton.Size = UDim2.new(0, 78, 0, 28)
-TpButton.Position = UDim2.new(0, 140, 0, 252)
+TpButton.Position = UDim2.new(0, 140, 0, 280)
 TpButton.BackgroundColor3 = COLORS.ToggleOff
 TpButton.Text = "OFF"
 TpButton.TextColor3 = COLORS.TextActive
 TpButton.Font = Enum.Font.GothamBold
-TpButton.TextSize = 9
+TpButton.TextSize = 11
 TpButton.AutoButtonColor = false
 TpButton.Parent = Content
 
@@ -1364,12 +1812,12 @@ TpStroke.Parent = TpButton
 local TpKeybindButton = Instance.new("TextButton")
 TpKeybindButton.Name = "TpKeybindButton"
 TpKeybindButton.Size = UDim2.new(0, 46, 0, 28)
-TpKeybindButton.Position = UDim2.new(0, 222, 0, 252)
+TpKeybindButton.Position = UDim2.new(0, 222, 0, 280)
 TpKeybindButton.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 TpKeybindButton.Text = tpKeybind.Name:upper()
 TpKeybindButton.TextColor3 = COLORS.TextActive
 TpKeybindButton.Font = Enum.Font.GothamBold
-TpKeybindButton.TextSize = 10
+TpKeybindButton.TextSize = 11
 TpKeybindButton.AutoButtonColor = false
 TpKeybindButton.Parent = Content
 
@@ -1384,14 +1832,14 @@ TpKeybindStroke.Thickness = 1
 TpKeybindStroke.Parent = TpKeybindButton
 
 -- ==========================================
--- ROW 8: Speed Slider (offset 286)
+-- ROW 9: Speed Slider (offset 312)
 -- ==========================================
-createRowLabel("Speed", 286)
+createRowLabel("Speed", 312)
 
 local SliderTrack = Instance.new("Frame")
 SliderTrack.Name = "SliderTrack"
 SliderTrack.Size = UDim2.new(0, 78, 0, 4)
-SliderTrack.Position = UDim2.new(0, 140, 0, 298) -- Centered vertically at 286 + 12px
+SliderTrack.Position = UDim2.new(0, 140, 0, 324) -- Centered vertically at 312 + 12px
 SliderTrack.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 SliderTrack.BorderSizePixel = 0
 SliderTrack.Active = true
@@ -1434,13 +1882,13 @@ SliderThumbStroke.Parent = SliderThumb
 local SpeedTextBox = Instance.new("TextBox")
 SpeedTextBox.Name = "SpeedTextBox"
 SpeedTextBox.Size = UDim2.new(0, 46, 0, 28)
-SpeedTextBox.Position = UDim2.new(0, 222, 0, 286)
+SpeedTextBox.Position = UDim2.new(0, 222, 0, 312)
 SpeedTextBox.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 SpeedTextBox.Text = tostring(loopSpeedValue)
 SpeedTextBox.TextColor3 = COLORS.TextActive
 SpeedTextBox.PlaceholderText = ""
 SpeedTextBox.Font = Enum.Font.GothamBold
-SpeedTextBox.TextSize = 10
+SpeedTextBox.TextSize = 11
 SpeedTextBox.ClearTextOnFocus = true
 SpeedTextBox.Parent = Content
 
@@ -1458,7 +1906,7 @@ SpeedBoxStroke.Parent = SpeedTextBox
 local Divider2 = Instance.new("Frame")
 Divider2.Name = "Divider2"
 Divider2.Size = UDim2.new(1, -24, 0, 1)
-Divider2.Position = UDim2.new(0, 12, 0, 322)
+Divider2.Position = UDim2.new(0, 12, 0, 348)
 Divider2.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 Divider2.BorderSizePixel = 0
 Divider2.Parent = Content
@@ -1467,29 +1915,56 @@ Divider2.Parent = Content
 local SettingsTitle = Instance.new("TextLabel")
 SettingsTitle.Name = "SettingsTitle"
 SettingsTitle.Size = UDim2.new(1, -24, 0, 14)
-SettingsTitle.Position = UDim2.new(0, 12, 0, 330)
+SettingsTitle.Position = UDim2.new(0, 12, 0, 356)
 SettingsTitle.BackgroundTransparency = 1
 SettingsTitle.Text = "GAME SETTING"
 SettingsTitle.TextColor3 = COLORS.TextMuted
-SettingsTitle.TextSize = 9
+SettingsTitle.TextSize = 11
 SettingsTitle.Font = Enum.Font.GothamBold
 SettingsTitle.TextXAlignment = Enum.TextXAlignment.Left
 SettingsTitle.Parent = Content
 
 -- ==========================================
--- ROW 9: Toggle Panel (offset 348)
+-- ROW 10: FullBright Toggle (offset 374)
 -- ==========================================
-createRowLabel("Toggle Panel", 348)
+createRowLabel("FullBright", 374)
+
+local FullBrightButton = Instance.new("TextButton")
+FullBrightButton.Name = "FullBrightButton"
+FullBrightButton.Size = UDim2.new(0, 128, 0, 28)
+FullBrightButton.Position = UDim2.new(0, 140, 0, 374)
+FullBrightButton.BackgroundColor3 = COLORS.ToggleOff
+FullBrightButton.Text = "OFF"
+FullBrightButton.TextColor3 = COLORS.TextActive
+FullBrightButton.Font = Enum.Font.GothamBold
+FullBrightButton.TextSize = 11
+FullBrightButton.AutoButtonColor = false
+FullBrightButton.Parent = Content
+
+local FullBrightCorner = Instance.new("UICorner")
+FullBrightCorner.CornerRadius = UDim.new(0, 5)
+FullBrightCorner.Parent = FullBrightButton
+
+local FullBrightStroke = Instance.new("UIStroke")
+FullBrightStroke.Color = Color3.fromRGB(255, 255, 255)
+FullBrightStroke.Transparency = 0.88
+FullBrightStroke.Thickness = 1
+FullBrightStroke.Parent = FullBrightButton
+
+-- ==========================================
+-- ROW 11: Toggle Panel (offset 406)
+-- ==========================================
+createRowLabel("Toggle Panel", 406)
 
 local PanelHideButton = Instance.new("TextButton")
 PanelHideButton.Name = "PanelHideButton"
 PanelHideButton.Size = UDim2.new(0, 78, 0, 28)
-PanelHideButton.Position = UDim2.new(0, 140, 0, 348)
+PanelHideButton.Position = UDim2.new(0, 140, 0, 406)
 PanelHideButton.BackgroundColor3 = COLORS.ToggleOff
 PanelHideButton.Text = "HIDE"
 PanelHideButton.TextColor3 = COLORS.TextActive
 PanelHideButton.Font = Enum.Font.GothamBold
-PanelHideButton.TextSize = 9
+PanelHideButton.TextSize = 11
 PanelHideButton.AutoButtonColor = false
 PanelHideButton.Parent = Content
 
@@ -1506,12 +1981,12 @@ PanelHideStroke.Parent = PanelHideButton
 local PanelKeybindButton = Instance.new("TextButton")
 PanelKeybindButton.Name = "PanelKeybindButton"
 PanelKeybindButton.Size = UDim2.new(0, 46, 0, 28)
-PanelKeybindButton.Position = UDim2.new(0, 222, 0, 348)
+PanelKeybindButton.Position = UDim2.new(0, 222, 0, 406)
 PanelKeybindButton.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 PanelKeybindButton.Text = panelKeybind.Name:upper()
 PanelKeybindButton.TextColor3 = COLORS.TextActive
 PanelKeybindButton.Font = Enum.Font.GothamBold
-PanelKeybindButton.TextSize = 10
+PanelKeybindButton.TextSize = 11
 PanelKeybindButton.AutoButtonColor = false
 PanelKeybindButton.Parent = Content
 
@@ -1580,6 +2055,7 @@ end
 -- Hook Visual Toggles
 hookButtonEvents(EnemyButton, 26, function() return enemyEspEnabled end, nil, enableEnemyEsp, disableEnemyEsp, COLORS.EnemyAccent, "OFF", "ON")
 hookButtonEvents(ShardButton, 58, function() return shardEspEnabled end, nil, enableShardEsp, disableShardEsp, COLORS.ShardDefaultAccent, "OFF", "ON")
+hookButtonEvents(FullBrightButton, 374, function() return fullbrightEnabled end, nil, enableFullBright, disableFullBright, Color3.fromRGB(241, 196, 15), "OFF", "ON")
 
 local function updateNoclipUI()
     if noclipEnabled then
@@ -1600,6 +2076,35 @@ local function updateTpUI()
         TweenService:Create(TpButton, TWEEN_INFO, { BackgroundColor3 = COLORS.ToggleOff }):Play()
     end
 end
+
+-- ==========================================
+-- PLAYER ROW CUSTOM INTERACTIVE HOOKS (Fixed Offset 154)
+-- ==========================================
+PlayerButton.MouseEnter:Connect(function()
+    local hoverBase = playerEspEnabled and COLORS.PortalAccent or COLORS.ToggleOff
+    TweenService:Create(PlayerButton, TWEEN_INFO, { BackgroundColor3 = hoverBase:Lerp(Color3.fromRGB(255,255,255), 0.08) }):Play()
+end)
+
+PlayerButton.MouseLeave:Connect(function()
+    TweenService:Create(PlayerButton, TWEEN_INFO, { BackgroundColor3 = playerEspEnabled and COLORS.PortalAccent or COLORS.ToggleOff }):Play()
+end)
+
+PlayerButton.MouseButton1Down:Connect(function()
+    TweenService:Create(PlayerButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 156) }):Play()
+end)
+
+PlayerButton.MouseButton1Up:Connect(function()
+    TweenService:Create(PlayerButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 154) }):Play()
+    if playerEspEnabled then
+        disablePlayerEsp()
+        PlayerButton.Text = "OFF"
+        TweenService:Create(PlayerButton, TWEEN_INFO, { BackgroundColor3 = COLORS.ToggleOff }):Play()
+    else
+        enablePlayerEsp()
+        PlayerButton.Text = "ON"
+        TweenService:Create(PlayerButton, TWEEN_INFO, { BackgroundColor3 = COLORS.PortalAccent }):Play()
+    end
+end)
 
 -- ==========================================
 -- ALTAR ROW CUSTOM INTERACTIVE HOOKS (Fixed Offset 90)
@@ -1869,7 +2374,7 @@ SpeedTextBox.FocusLost:Connect(function(enterPressed)
 end)
 
 -- ==========================================
--- GAME SETTING ROW CUSTOM INTERACTIVE HOOKS (Fixed Offset 348)
+-- GAME SETTING ROW CUSTOM INTERACTIVE HOOKS (Fixed Offset 406)
 -- ==========================================
 PanelHideButton.MouseEnter:Connect(function()
     TweenService:Create(PanelHideButton, TWEEN_INFO, { BackgroundColor3 = COLORS.ToggleOff:Lerp(Color3.fromRGB(255,255,255), 0.08) }):Play()
@@ -1880,13 +2385,12 @@ PanelHideButton.MouseLeave:Connect(function()
 end)
 
 PanelHideButton.MouseButton1Down:Connect(function()
-    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 350) }):Play()
+    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 408) }):Play()
 end)
 
 PanelHideButton.MouseButton1Up:Connect(function()
-    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 348) }):Play()
-    panelVisible = false
-    MainFrame.Visible = false
+    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 406) }):Play()
+    setPanelVisible(false)
 end)
 
 PanelKeybindButton.MouseEnter:Connect(function()
@@ -1898,11 +2402,11 @@ PanelKeybindButton.MouseLeave:Connect(function()
 end)
 
 PanelKeybindButton.MouseButton1Down:Connect(function()
-    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 350) }):Play()
+    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 408) }):Play()
 end)
 
 PanelKeybindButton.MouseButton1Up:Connect(function()
-    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 348) }):Play()
+    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 406) }):Play()
     panelBindingActive = true
     PanelKeybindButton.Text = "..."
 end)
@@ -1932,8 +2436,7 @@ inputConnection = UserInputService.InputBegan:Connect(function(input, processed)
     if not panelBindingActive and not bindingActive and not tpBindingActive then
         if input.UserInputType == Enum.UserInputType.Keyboard then
             if input.KeyCode == panelKeybind then
-                panelVisible = not panelVisible
-                MainFrame.Visible = panelVisible
+                setPanelVisible(not panelVisible)
                 return
             end
         end
@@ -2004,10 +2507,12 @@ _G.AntigravityEspCleanup = function()
     disableShardEsp()
     disableAltarEsp()
     disablePortalEsp()
+    disablePlayerEsp()
     disableAvoidEnemy()
     disableNoClip()
     stopTp()
     stopSpeedLoop()
+    disableFullBright()
     
     syncRunning = false
     
@@ -2027,7 +2532,7 @@ _G.AntigravityEspCleanup = function()
     end
     
     _G.AntigravityEspCleanup = nil
-    print("Cleaned")
+    print("[ESP Panel] Cleaned slate. Ready for next execution.")
 end
 
-print("Menu Loaded")
+print("[ESP Panel] Loaded successfully.")")
