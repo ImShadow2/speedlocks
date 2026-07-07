@@ -100,6 +100,19 @@ local function getHumanoid()
     return character and character:FindFirstChildOfClass("Humanoid")
 end
 
+-- Helper to safely restore standard character collisions
+local function restoreCharacterCollision(character)
+    if not character then return end
+    for _, child in ipairs(character:GetDescendants()) do
+        if child:IsA("BasePart") then
+            -- Re-enable collision for primary parts (Torso/HRP/Head control physics bounding boxes)
+            if child.Name == "HumanoidRootPart" or child.Name == "Torso" or child.Name == "UpperTorso" or child.Name == "LowerTorso" or child.Name == "Head" then
+                child.CanCollide = true
+            end
+        end
+    end
+end
+
 -- ============================================================================
 -- 3. MODERNIZED INTERACTIVE GUI STRUCTURE
 -- ============================================================================
@@ -644,8 +657,8 @@ local function setupEspForPlayer(player)
     table.insert(EspConnections, charAddedConn)
 end
 
--- Connect ESP Toggle
-EspToggleButton.MouseButton1Click:Connect(function()
+-- Connect ESP Toggle function
+local function toggleEsp()
     EspEnabled = not EspEnabled
     EspToggleButton.Text = EspEnabled and "ON" or "OFF"
     EspToggleButton.TextColor3 = EspEnabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 75, 75)
@@ -655,7 +668,10 @@ EspToggleButton.MouseButton1Click:Connect(function()
             task.spawn(setupCharacterEsp, player, player.Character)
         end
     end
-end)
+end
+
+-- Connect ESP Toggle button click
+EspToggleButton.MouseButton1Click:Connect(toggleEsp)
 
 -- Connect Tag Switch Toggle
 EspTagToggleButton.MouseButton1Click:Connect(function()
@@ -724,6 +740,12 @@ end)
 local function cleanupActiveScript()
     ScriptRunning = false
     
+    -- Restore standard collision boundaries on local player if script killed while noclip was active
+    local char = LocalPlayer.Character
+    if char then
+        pcall(restoreCharacterCollision, char)
+    end
+    
     -- Clear ESP Connections & elements
     for _, conn in ipairs(EspConnections) do
         pcall(function() conn:Disconnect() end)
@@ -788,14 +810,7 @@ FlyInput.FocusLost:Connect(function() TargetFlySpeed = tonumber(FlyInput.Text) o
 SpeedBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingSpeed = true; SpeedBindButton.Text = "..."; SpeedBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
 NoclipBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingNoclip = true; NoclipBindButton.Text = "..."; NoclipBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
 FlyBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingFly = true; FlyBindButton.Text = "..."; FlyBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
-
-HideBindButton.MouseButton1Click:Connect(function() 
-    if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then 
-        IsBindingHide = true; 
-        HideBindButton.Text = "..."; 
-        HideBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) 
-    end 
-end)
+HideBindButton.MouseButton1Click:Connect(function() if not IsBindingSpeed and not IsBindingNoclip and not IsBindingFly and not IsBindingHide then IsBindingHide = true; HideBindButton.Text = "..."; HideBindButton.TextColor3 = Color3.fromRGB(255, 150, 0) end end)
 
 JumpToggleButton.MouseButton1Click:Connect(function()
     JumpEnabled = not JumpEnabled
@@ -910,7 +925,15 @@ local function toggleNoclip()
     NoclipEnabled = not NoclipEnabled
     NoclipStatusLabel.Text = NoclipEnabled and "STATUS: ON" or "STATUS: OFF"
     NoclipStatusLabel.TextColor3 = NoclipEnabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 75, 75)
+    
     if not NoclipEnabled then
+        -- Forcefully restore physics collisions on all main character limbs immediately
+        local char = LocalPlayer.Character
+        if char then
+            pcall(restoreCharacterCollision, char)
+        end
+        
+        -- Give a slight physics push to force character out of overlapping walls
         local hum = getHumanoid()
         if hum then task.wait(0.05); hum.Jump = true end
     end
