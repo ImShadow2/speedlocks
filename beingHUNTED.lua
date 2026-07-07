@@ -1,17 +1,3 @@
--- Premium Roblox Multi-ESP & Misc Script
--- Features:
---   1. Visuals Section:
---      - Enemy ESP: Red Highlight (no fill) on ALL enemies in `workspace.Terrain.Enemies`
---      - Shard ESP: Diamond billboards on ALL shards (Color-Coded, defaults to Violet)
---      - Altar ESP: Cyan Highlight (no fill) on RingAltar
---      - Portal ESP: Labeled billboards (Gray Entrance / Green Exit)
---   2. Miscellaneous Section:
---      - Avoid Enemy: Creates a customizable-stud "reverse magnet" forcefield around all enemies, forcing the player away.
---      - NoClip: Toggleable NoClip with a bindable key (click keybind button to re-bind). Restores body collisions instantly upon disabling.
---      - Shard TP: Hold-to-trigger teleportation to the nearest shard in `workspace.Shards` (re-bindable).
---        * Infinite Chain-TP: Teleports to up to 20 shards IN A SINGLE FRAME (instant clearance of the entire map!).
---   3. Clean Slate Engine: Checks _G for duplicate runs and cleans up all threads, connections, and GUIs.
-
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
@@ -101,6 +87,7 @@ local speedLoopConnection = nil
 
 local fullbrightEnabled = false
 local fullbrightConnection = nil
+local antiVoidEnabled = true
 local defaultLighting = {
     Ambient = Color3.fromRGB(0, 0, 0),
     ColorShift_Bottom = Color3.fromRGB(0, 0, 0),
@@ -985,12 +972,14 @@ local function stopTp()
 end
 
 local speedChangeConnection = nil
+local hookedHumanoid = nil
 
 local function startSpeedLoop()
     if speedLoopConnection then return end
     
     local function hookHumanoid(humanoid)
         if speedChangeConnection then speedChangeConnection:Disconnect() end
+        hookedHumanoid = humanoid
         speedChangeConnection = humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
             if humanoid.WalkSpeed ~= loopSpeedValue then
                 humanoid.WalkSpeed = loopSpeedValue
@@ -1012,7 +1001,7 @@ local function startSpeedLoop()
             if hum.WalkSpeed ~= loopSpeedValue then
                 hum.WalkSpeed = loopSpeedValue
             end
-            if not speedChangeConnection or not speedChangeConnection.Connected then
+            if hum ~= hookedHumanoid then
                 hookHumanoid(hum)
             end
         end
@@ -1028,10 +1017,77 @@ local function stopSpeedLoop()
         speedChangeConnection:Disconnect()
         speedChangeConnection = nil
     end
+    hookedHumanoid = nil
     local character = localPlayer.Character
     local humanoid = character and character:FindFirstChildOfClass("Humanoid")
     if humanoid then
         humanoid.WalkSpeed = 16
+    end
+end
+
+-- ==========================================
+-- GAME SETTING: ANTI-VOID (Threshold -25, TP last position +30 Y)
+-- ==========================================
+local lastSafePosition = nil
+local antiVoidConnection = nil
+local safePositionThread = nil
+
+local function enableAntiVoid()
+    antiVoidEnabled = true
+    
+    -- Loop to check void falling
+    if antiVoidConnection then antiVoidConnection:Disconnect() end
+    antiVoidConnection = RunService.Heartbeat:Connect(function()
+        if not antiVoidEnabled then return end
+        local character = localPlayer.Character
+        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        if not rootPart then return end
+        
+        -- If Y falls below -25, teleport back to last safe position with Y offset +30
+        if rootPart.Position.Y < -25 then
+            if lastSafePosition then
+                rootPart.CFrame = CFrame.new(lastSafePosition + Vector3.new(0, 30, 0))
+                pcall(function()
+                    rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end)
+            else
+                -- Fallback to teleporting straight up 50 studs if no safe position has been logged yet
+                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, 50, 0)
+                pcall(function()
+                    rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                end)
+            end
+        end
+    end)
+    
+    -- Periodic thread to record safe positions
+    if safePositionThread then task.cancel(safePositionThread) end
+    safePositionThread = taskSpawn(function()
+        while antiVoidEnabled do
+            local character = localPlayer.Character
+            local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+            local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+            if rootPart and humanoid then
+                local pos = rootPart.Position
+                -- Only save position if the Y position is safe and character health is normal
+                if pos.Y >= -25 and humanoid.Health > 0 then
+                    lastSafePosition = pos
+                end
+            end
+            taskWait(0.5)
+        end
+    end)
+end
+
+local function disableAntiVoid()
+    antiVoidEnabled = false
+    if antiVoidConnection then
+        antiVoidConnection:Disconnect()
+        antiVoidConnection = nil
+    end
+    if safePositionThread then
+        task.cancel(safePositionThread)
+        safePositionThread = nil
     end
 end
 
@@ -1180,7 +1236,7 @@ end)
 -- Main Frame (Draggable Container)
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 288, 0, 474) -- Expanded to 474 height to align all rows including Player ESP
+MainFrame.Size = UDim2.new(0, 288, 0, 506) -- Expanded to 506 height to align all rows including Anti-Void
 MainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 MainFrame.BackgroundColor3 = COLORS.Background
 MainFrame.BorderSizePixel = 0
@@ -1952,14 +2008,41 @@ FullBrightStroke.Thickness = 1
 FullBrightStroke.Parent = FullBrightButton
 
 -- ==========================================
--- ROW 11: Toggle Panel (offset 406)
+-- ROW 11: Anti-Void (offset 406)
 -- ==========================================
-createRowLabel("Toggle Panel", 406)
+createRowLabel("Anti-Void", 406)
+
+local AntiVoidButton = Instance.new("TextButton")
+AntiVoidButton.Name = "AntiVoidButton"
+AntiVoidButton.Size = UDim2.new(0, 128, 0, 28)
+AntiVoidButton.Position = UDim2.new(0, 140, 0, 406)
+AntiVoidButton.BackgroundColor3 = COLORS.PortalAccent -- ON at startup
+AntiVoidButton.Text = "ON"
+AntiVoidButton.TextColor3 = COLORS.TextActive
+AntiVoidButton.Font = Enum.Font.GothamBold
+AntiVoidButton.TextSize = 11
+AntiVoidButton.AutoButtonColor = false
+AntiVoidButton.Parent = Content
+
+local AntiVoidCorner = Instance.new("UICorner")
+AntiVoidCorner.CornerRadius = UDim.new(0, 5)
+AntiVoidCorner.Parent = AntiVoidButton
+
+local AntiVoidStroke = Instance.new("UIStroke")
+AntiVoidStroke.Color = Color3.fromRGB(255, 255, 255)
+AntiVoidStroke.Transparency = 0.88
+AntiVoidStroke.Thickness = 1
+AntiVoidStroke.Parent = AntiVoidButton
+
+-- ==========================================
+-- ROW 12: Toggle Panel (offset 438)
+-- ==========================================
+createRowLabel("Toggle Panel", 438)
 
 local PanelHideButton = Instance.new("TextButton")
 PanelHideButton.Name = "PanelHideButton"
 PanelHideButton.Size = UDim2.new(0, 78, 0, 28)
-PanelHideButton.Position = UDim2.new(0, 140, 0, 406)
+PanelHideButton.Position = UDim2.new(0, 140, 0, 438)
 PanelHideButton.BackgroundColor3 = COLORS.ToggleOff
 PanelHideButton.Text = "HIDE"
 PanelHideButton.TextColor3 = COLORS.TextActive
@@ -1981,7 +2064,7 @@ PanelHideStroke.Parent = PanelHideButton
 local PanelKeybindButton = Instance.new("TextButton")
 PanelKeybindButton.Name = "PanelKeybindButton"
 PanelKeybindButton.Size = UDim2.new(0, 46, 0, 28)
-PanelKeybindButton.Position = UDim2.new(0, 222, 0, 406)
+PanelKeybindButton.Position = UDim2.new(0, 222, 0, 438)
 PanelKeybindButton.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 PanelKeybindButton.Text = panelKeybind.Name:upper()
 PanelKeybindButton.TextColor3 = COLORS.TextActive
@@ -2220,7 +2303,7 @@ PortalTpButton.MouseButton1Up:Connect(function()
 end)
 
 -- ==========================================
--- AVOID ROW CUSTOM HOOKS (Fixed Offset 184)
+-- AVOID ROW CUSTOM HOOKS (Fixed Offset 216)
 -- ==========================================
 AvoidButton.MouseEnter:Connect(function()
     local hoverBase = avoidEnemyEnabled and COLORS.AvoidAccent or COLORS.ToggleOff
@@ -2230,17 +2313,17 @@ AvoidButton.MouseLeave:Connect(function()
     TweenService:Create(AvoidButton, TWEEN_INFO, { BackgroundColor3 = avoidEnemyEnabled and COLORS.AvoidAccent or COLORS.ToggleOff }):Play()
 end)
 AvoidButton.MouseButton1Down:Connect(function()
-    TweenService:Create(AvoidButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 186) }):Play()
+    TweenService:Create(AvoidButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 218) }):Play()
 end)
 AvoidButton.MouseButton1Up:Connect(function()
-    TweenService:Create(AvoidButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 184) }):Play()
+    TweenService:Create(AvoidButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 216) }):Play()
     if avoidEnemyEnabled then disableAvoidEnemy() else enableAvoidEnemy() end
     AvoidButton.Text = avoidEnemyEnabled and "ON" or "OFF"
     TweenService:Create(AvoidButton, TWEEN_INFO, { BackgroundColor3 = avoidEnemyEnabled and COLORS.AvoidAccent or COLORS.ToggleOff }):Play()
 end)
 
 -- ==========================================
--- NOCLIP ROW CUSTOM HOOKS (Fixed Offset 218)
+-- NOCLIP ROW CUSTOM HOOKS (Fixed Offset 248)
 -- ==========================================
 NoClipButton.MouseEnter:Connect(function()
     local hoverBase = noclipEnabled and COLORS.NoclipAccent or COLORS.ToggleOff
@@ -2250,10 +2333,10 @@ NoClipButton.MouseLeave:Connect(function()
     TweenService:Create(NoClipButton, TWEEN_INFO, { BackgroundColor3 = noclipEnabled and COLORS.NoclipAccent or COLORS.ToggleOff }):Play()
 end)
 NoClipButton.MouseButton1Down:Connect(function()
-    TweenService:Create(NoClipButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 220) }):Play()
+    TweenService:Create(NoClipButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 250) }):Play()
 end)
 NoClipButton.MouseButton1Up:Connect(function()
-    TweenService:Create(NoClipButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 218) }):Play()
+    TweenService:Create(NoClipButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 248) }):Play()
     if noclipEnabled then disableNoClip() else enableNoClip() end
     updateNoclipUI()
 end)
@@ -2266,16 +2349,16 @@ KeybindButton.MouseLeave:Connect(function()
     TweenService:Create(KeybindButton, TWEEN_INFO, { BackgroundColor3 = Color3.fromRGB(30, 30, 35) }):Play()
 end)
 KeybindButton.MouseButton1Down:Connect(function()
-    TweenService:Create(KeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 220) }):Play()
+    TweenService:Create(KeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 250) }):Play()
 end)
 KeybindButton.MouseButton1Up:Connect(function()
-    TweenService:Create(KeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 218) }):Play()
+    TweenService:Create(KeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 248) }):Play()
     bindingActive = true
     KeybindButton.Text = "..."
 end)
 
 -- ==========================================
--- SHARD TP ROW CUSTOM HOOKS (Fixed Offset 252)
+-- SHARD TP ROW CUSTOM HOOKS (Fixed Offset 280)
 -- ==========================================
 TpButton.MouseEnter:Connect(function()
     local hoverBase = tpActive and COLORS.AvoidAccent or COLORS.ToggleOff
@@ -2289,12 +2372,12 @@ TpButton.MouseLeave:Connect(function()
     TweenService:Create(TpButton, TWEEN_INFO, { BackgroundColor3 = COLORS.ToggleOff }):Play()
 end)
 TpButton.MouseButton1Down:Connect(function()
-    TweenService:Create(TpButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 254) }):Play()
+    TweenService:Create(TpButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 282) }):Play()
     startTp()
     updateTpUI()
 end)
 TpButton.MouseButton1Up:Connect(function()
-    TweenService:Create(TpButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 252) }):Play()
+    TweenService:Create(TpButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 280) }):Play()
     stopTp()
     updateTpUI()
 end)
@@ -2306,10 +2389,10 @@ TpKeybindButton.MouseLeave:Connect(function()
     TweenService:Create(TpKeybindButton, TWEEN_INFO, { BackgroundColor3 = Color3.fromRGB(30, 30, 35) }):Play()
 end)
 TpKeybindButton.MouseButton1Down:Connect(function()
-    TweenService:Create(TpKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 254) }):Play()
+    TweenService:Create(TpKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 282) }):Play()
 end)
 TpKeybindButton.MouseButton1Up:Connect(function()
-    TweenService:Create(TpKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 252) }):Play()
+    TweenService:Create(TpKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 280) }):Play()
     tpBindingActive = true
     TpKeybindButton.Text = "..."
 end)
@@ -2374,7 +2457,36 @@ SpeedTextBox.FocusLost:Connect(function(enterPressed)
 end)
 
 -- ==========================================
--- GAME SETTING ROW CUSTOM INTERACTIVE HOOKS (Fixed Offset 406)
+-- ANTI-VOID ROW CUSTOM INTERACTIVE HOOKS (Fixed Offset 406)
+-- ==========================================
+AntiVoidButton.MouseEnter:Connect(function()
+    local hoverBase = antiVoidEnabled and COLORS.PortalAccent or COLORS.ToggleOff
+    TweenService:Create(AntiVoidButton, TWEEN_INFO, { BackgroundColor3 = hoverBase:Lerp(Color3.fromRGB(255,255,255), 0.08) }):Play()
+end)
+
+AntiVoidButton.MouseLeave:Connect(function()
+    TweenService:Create(AntiVoidButton, TWEEN_INFO, { BackgroundColor3 = antiVoidEnabled and COLORS.PortalAccent or COLORS.ToggleOff }):Play()
+end)
+
+AntiVoidButton.MouseButton1Down:Connect(function()
+    TweenService:Create(AntiVoidButton, TWEEN_INFO, { Size = UDim2.new(0, 124, 0, 24), Position = UDim2.new(0, 142, 0, 408) }):Play()
+end)
+
+AntiVoidButton.MouseButton1Up:Connect(function()
+    TweenService:Create(AntiVoidButton, TWEEN_INFO, { Size = UDim2.new(0, 128, 0, 28), Position = UDim2.new(0, 140, 0, 406) }):Play()
+    if antiVoidEnabled then
+        disableAntiVoid()
+        AntiVoidButton.Text = "OFF"
+        TweenService:Create(AntiVoidButton, TWEEN_INFO, { BackgroundColor3 = COLORS.ToggleOff }):Play()
+    else
+        enableAntiVoid()
+        AntiVoidButton.Text = "ON"
+        TweenService:Create(AntiVoidButton, TWEEN_INFO, { BackgroundColor3 = COLORS.PortalAccent }):Play()
+    end
+end)
+
+-- ==========================================
+-- GAME SETTING ROW CUSTOM INTERACTIVE HOOKS (Fixed Offset 438)
 -- ==========================================
 PanelHideButton.MouseEnter:Connect(function()
     TweenService:Create(PanelHideButton, TWEEN_INFO, { BackgroundColor3 = COLORS.ToggleOff:Lerp(Color3.fromRGB(255,255,255), 0.08) }):Play()
@@ -2385,11 +2497,11 @@ PanelHideButton.MouseLeave:Connect(function()
 end)
 
 PanelHideButton.MouseButton1Down:Connect(function()
-    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 408) }):Play()
+    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 74, 0, 24), Position = UDim2.new(0, 142, 0, 440) }):Play()
 end)
 
 PanelHideButton.MouseButton1Up:Connect(function()
-    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 406) }):Play()
+    TweenService:Create(PanelHideButton, TWEEN_INFO, { Size = UDim2.new(0, 78, 0, 28), Position = UDim2.new(0, 140, 0, 438) }):Play()
     setPanelVisible(false)
 end)
 
@@ -2402,11 +2514,11 @@ PanelKeybindButton.MouseLeave:Connect(function()
 end)
 
 PanelKeybindButton.MouseButton1Down:Connect(function()
-    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 408) }):Play()
+    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 42, 0, 24), Position = UDim2.new(0, 224, 0, 440) }):Play()
 end)
 
 PanelKeybindButton.MouseButton1Up:Connect(function()
-    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 406) }):Play()
+    TweenService:Create(PanelKeybindButton, TWEEN_INFO, { Size = UDim2.new(0, 46, 0, 28), Position = UDim2.new(0, 222, 0, 438) }):Play()
     panelBindingActive = true
     PanelKeybindButton.Text = "..."
 end)
@@ -2497,6 +2609,7 @@ end)
 -- Mount ScreenGui
 ScreenGui.Parent = parentGui
 startSpeedLoop()
+enableAntiVoid()
 
 -- ==========================================
 -- DEFINING GLOBAL CLEANUP HANDLER
@@ -2512,6 +2625,7 @@ _G.AntigravityEspCleanup = function()
     disableNoClip()
     stopTp()
     stopSpeedLoop()
+    disableAntiVoid()
     disableFullBright()
     
     syncRunning = false
@@ -2535,4 +2649,4 @@ _G.AntigravityEspCleanup = function()
     print("[ESP Panel] Cleaned slate. Ready for next execution.")
 end
 
-print("[ESP Panel] Loaded successfully.")")
+print("[ESP Panel] Loaded successfully.")
