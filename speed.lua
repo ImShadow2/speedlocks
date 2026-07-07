@@ -51,6 +51,11 @@ local SavedPosition = UDim2.new(0.05, 0, 0.2, 0)
 local FullBrightEnabled = false
 local NoFogEnabled = false
 
+-- ESP Config
+local EspEnabled = false
+local EspTagsEnabled = true
+local EspConnections = {}
+
 -- Backup table to restore things when turned off or script killed
 local OriginalLighting = {
     Ambient = game:GetService("Lighting").Ambient,
@@ -171,7 +176,7 @@ local HideRow = createRow("HideGui", 180)
 
 -- Separated Expansion Container Frame
 local HiddenContainer = Instance.new("Frame")
-HiddenContainer.Size = UDim2.new(1, 0, 0, 160)
+HiddenContainer.Size = UDim2.new(1, 0, 0, 238) -- Expanded height to support 6 items (6 * 38 = 228)
 HiddenContainer.Position = UDim2.new(0, 0, 0, 253)
 HiddenContainer.BackgroundTransparency = 1
 HiddenContainer.Parent = MainFrame
@@ -180,6 +185,8 @@ local TPRow = createRow("Teleport", 0, HiddenContainer)
 local InteractRow = createRow("FastInteract", 38, HiddenContainer)
 local FullBrightRow = createRow("FullBright", 76, HiddenContainer)
 local NoFogRow = createRow("NoFog", 114, HiddenContainer)
+local InfiniteYieldRow = createRow("InfYield", 152, HiddenContainer)
+local EspRow = createRow("HighlightESP", 190, HiddenContainer) -- Added Highlight ESP row
 
 -- --- 3A. ROW INTERNALS CONFIGURATION ---
 -- Speed Components
@@ -418,6 +425,52 @@ NoFogToggleButton.Font = Enum.Font.Code
 NoFogToggleButton.Parent = NoFogRow
 Instance.new("UICorner", NoFogToggleButton).CornerRadius = UDim.new(0, 4)
 
+-- Infinite Yield Components
+local InfiniteYieldDescLabel = Instance.new("TextLabel")
+InfiniteYieldDescLabel.Size = UDim2.new(0, 120, 1, 0)
+InfiniteYieldDescLabel.Position = UDim2.new(0, 95, 0, 0)
+InfiniteYieldDescLabel.BackgroundTransparency = 1
+InfiniteYieldDescLabel.Text = "EdgeIY Admin Commands"
+InfiniteYieldDescLabel.TextColor3 = Color3.fromRGB(140, 140, 140)
+InfiniteYieldDescLabel.TextSize = 11
+InfiniteYieldDescLabel.Font = Enum.Font.Gotham
+InfiniteYieldDescLabel.TextXAlignment = Enum.TextXAlignment.Left
+InfiniteYieldDescLabel.Parent = InfiniteYieldRow
+
+local InfiniteYieldButton = Instance.new("TextButton")
+InfiniteYieldButton.Size = UDim2.new(0, 110, 0, 22)
+InfiniteYieldButton.Position = UDim2.new(1, -118, 0.5, -11)
+InfiniteYieldButton.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+InfiniteYieldButton.Text = "Load IY"
+InfiniteYieldButton.TextColor3 = Color3.fromRGB(180, 75, 255)
+InfiniteYieldButton.TextSize = 12
+InfiniteYieldButton.Font = Enum.Font.Code
+InfiniteYieldButton.Parent = InfiniteYieldRow
+Instance.new("UICorner", InfiniteYieldButton).CornerRadius = UDim.new(0, 4)
+
+-- Highlight ESP Components (perfect alignment matching input field and buttons)
+local EspTagToggleButton = Instance.new("TextButton")
+EspTagToggleButton.Size = UDim2.new(0, 85, 0, 22) -- Match textbox/live label size (85px)
+EspTagToggleButton.Position = UDim2.new(0, 112, 0.5, -11) -- Align exactly at the inputs column (X = 112)
+EspTagToggleButton.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+EspTagToggleButton.Text = "WITH TAG"
+EspTagToggleButton.TextColor3 = Color3.fromRGB(0, 200, 255)
+EspTagToggleButton.TextSize = 12
+EspTagToggleButton.Font = Enum.Font.Code
+EspTagToggleButton.Parent = EspRow
+Instance.new("UICorner", EspTagToggleButton).CornerRadius = UDim.new(0, 4)
+
+local EspToggleButton = Instance.new("TextButton")
+EspToggleButton.Size = UDim2.new(0, 110, 0, 22) -- Match all other rightmost buttons (110px)
+EspToggleButton.Position = UDim2.new(1, -118, 0.5, -11) -- Align exactly at the buttons column (1, -118)
+EspToggleButton.BackgroundColor3 = Color3.fromRGB(38, 38, 38)
+EspToggleButton.Text = "OFF"
+EspToggleButton.TextColor3 = Color3.fromRGB(255, 75, 75)
+EspToggleButton.TextSize = 12
+EspToggleButton.Font = Enum.Font.Code
+EspToggleButton.Parent = EspRow
+Instance.new("UICorner", EspToggleButton).CornerRadius = UDim.new(0, 4)
+
 -- Menu Expand Control Button
 local ExpandButton = Instance.new("TextButton")
 ExpandButton.Size = UDim2.new(1, -16, 0, 22)
@@ -507,6 +560,145 @@ task.spawn(function()
     end
 end)
 
+-- --- ESP SYSTEM ENGINE ---
+local function cleanEspForCharacter(char)
+    if not char then return end
+    local highlight = char:FindFirstChild("EspHighlight_ProV12")
+    if highlight then pcall(function() highlight:Destroy() end) end
+    local tag = char:FindFirstChild("EspTag_ProV12")
+    if tag then pcall(function() tag:Destroy() end) end
+end
+
+local function setupCharacterEsp(player, char)
+    if not char then return end
+    
+    if not EspEnabled or player == LocalPlayer then
+        cleanEspForCharacter(char)
+        return
+    end
+    
+    -- Outline Highlight Setup
+    local highlight = char:FindFirstChild("EspHighlight_ProV12")
+    if not highlight then
+        highlight = Instance.new("Highlight")
+        highlight.Name = "EspHighlight_ProV12"
+        highlight.FillTransparency = 1
+        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+        highlight.OutlineTransparency = 0
+        highlight.Adornee = char
+        highlight.Parent = char
+    end
+    
+    -- Tag (BillboardGui) Setup
+    local tag = char:FindFirstChild("EspTag_ProV12")
+    if EspTagsEnabled then
+        if not tag then
+            local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart") or char:FindFirstChildOfClass("BasePart")
+            if head then
+                local bill = Instance.new("BillboardGui")
+                bill.Name = "EspTag_ProV12"
+                bill.Size = UDim2.new(0, 150, 0, 24)
+                bill.AlwaysOnTop = true
+                bill.Adornee = head
+                bill.StudsOffset = Vector3.new(0, 2.2, 0)
+                
+                local label = Instance.new("TextLabel")
+                label.Size = UDim2.new(1, 0, 1, 0)
+                label.BackgroundTransparency = 1
+                label.Text = player.Name .. "\n(" .. tostring(player.UserId) .. ")"
+                label.TextColor3 = Color3.fromRGB(255, 255, 255)
+                label.TextStrokeTransparency = 0.3
+                label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                label.TextSize = 8.5
+                label.Font = Enum.Font.GothamBold
+                label.Parent = bill
+                
+                bill.Parent = char
+            end
+        end
+    else
+        if tag then
+            pcall(function() tag:Destroy() end)
+        end
+    end
+end
+
+local function setupEspForPlayer(player)
+    if player == LocalPlayer then return end
+    
+    -- Initial apply with tiny delay to let Roblox assemble character parts
+    if player.Character then
+        task.spawn(function()
+            task.wait(0.2)
+            setupCharacterEsp(player, player.Character)
+        end)
+    end
+    
+    -- Track respawns
+    local charAddedConn = player.CharacterAdded:Connect(function(char)
+        task.spawn(function()
+            task.wait(0.2)
+            setupCharacterEsp(player, char)
+        end)
+    end)
+    table.insert(EspConnections, charAddedConn)
+end
+
+-- Connect ESP Toggle
+EspToggleButton.MouseButton1Click:Connect(function()
+    EspEnabled = not EspEnabled
+    EspToggleButton.Text = EspEnabled and "ON" or "OFF"
+    EspToggleButton.TextColor3 = EspEnabled and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 75, 75)
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then
+            task.spawn(setupCharacterEsp, player, player.Character)
+        end
+    end
+end)
+
+-- Connect Tag Switch Toggle
+EspTagToggleButton.MouseButton1Click:Connect(function()
+    EspTagsEnabled = not EspTagsEnabled
+    EspTagToggleButton.Text = EspTagsEnabled and "WITH TAG" or "NO TAG"
+    EspTagToggleButton.TextColor3 = EspTagsEnabled and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(140, 140, 140)
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then
+            task.spawn(setupCharacterEsp, player, player.Character)
+        end
+    end
+end)
+
+-- Hook up existing players
+for _, player in ipairs(Players:GetPlayers()) do
+    setupEspForPlayer(player)
+end
+
+-- Hook up newly joining players
+local espPlayerAdded = Players.PlayerAdded:Connect(setupEspForPlayer)
+table.insert(EspConnections, espPlayerAdded)
+
+-- Re-validation background loop to guarantee ESP persists & updates for all players (combats streaming / assembly delay)
+task.spawn(function()
+    while ScriptRunning do
+        if EspEnabled then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    local char = player.Character
+                    local highlight = char:FindFirstChild("EspHighlight_ProV12")
+                    local tag = char:FindFirstChild("EspTag_ProV12")
+                    
+                    if not highlight or (EspTagsEnabled and not tag) then
+                        task.spawn(setupCharacterEsp, player, char)
+                    end
+                end
+            end
+        end
+        task.wait(2)
+    end
+end)
+
 -- ============================================================================
 -- [ MANUAL HEIGHT CONFIGURATION SECTION ]
 -- ============================================================================
@@ -514,9 +706,9 @@ ExpandButton.MouseButton1Click:Connect(function()
     MenuExpanded = not MenuExpanded
     
     local ClosedWindowHeight = 260   
-    local OpenedWindowHeight = 440   
+    local OpenedWindowHeight = 516 -- Expanded from 478 to support ESP row (38px offset)
     local ClosedButtonYPos   = 220   
-    local OpenedButtonYPos   = 402   
+    local OpenedButtonYPos   = 478 -- Expanded from 440 to match new height
     
     local targetHeight = MenuExpanded and OpenedWindowHeight or ClosedWindowHeight
     local buttonText = MenuExpanded and "close" or "more"
@@ -531,6 +723,18 @@ end)
 -- Unified Destroy Pipeline (Restores environment defaults properly)
 local function cleanupActiveScript()
     ScriptRunning = false
+    
+    -- Clear ESP Connections & elements
+    for _, conn in ipairs(EspConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(EspConnections)
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character then
+            cleanEspForCharacter(player.Character)
+        end
+    end
     
     -- Clear physics items perfectly
     if bv then pcall(function() bv:Destroy() end) bv = nil end
@@ -721,6 +925,33 @@ local function toggleFly()
         if bg then bg:Destroy(); bg = nil end
     end
 end
+
+-- Connect Infinite Yield load logic
+InfiniteYieldButton.MouseButton1Click:Connect(function()
+    InfiniteYieldButton.Text = "Loading..."
+    InfiniteYieldButton.TextColor3 = Color3.fromRGB(255, 150, 0)
+    
+    local success, loadError = pcall(function()
+        -- Loadstring EdgeIY source code dynamically
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()
+    end)
+    
+    if success then
+        InfiniteYieldButton.Text = "Loaded!"
+        InfiniteYieldButton.TextColor3 = Color3.fromRGB(0, 255, 150)
+    else
+        warn("Failed to load Infinite Yield: " .. tostring(loadError))
+        InfiniteYieldButton.Text = "Error"
+        InfiniteYieldButton.TextColor3 = Color3.fromRGB(255, 75, 75)
+    end
+    
+    task.delay(3, function()
+        if InfiniteYieldButton then
+            InfiniteYieldButton.Text = "Load IY"
+            InfiniteYieldButton.TextColor3 = Color3.fromRGB(180, 75, 255)
+        end
+    end)
+end)
 
 -- User Input Trigger Allocators
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
