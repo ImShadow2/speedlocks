@@ -1,8 +1,8 @@
--- tp aim
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 local Camera = workspace.CurrentCamera
 
 local player = Players.LocalPlayer
@@ -18,6 +18,7 @@ local tpEnabled = false
 local useZeroGravity = true 
 local tpMethod = "Teleport" 
 local espEnabled = false 
+local wallCheckEnabled = false
 local targetMode = "Players" -- "Players", "NPCs", "Both"
 local masterLocked = true 
 local toggleKey = Enum.KeyCode.End 
@@ -29,7 +30,7 @@ local isBindingKey = false
 -- Garbage Collection / Cleanup Registry
 local scriptConnections = {}
 local npcCache = {}
-local activeHighlights = {} -- Tracks active highlight instances
+local activeHighlights = {} 
 
 local function safeConnect(signal, callback)
     local conn = signal:Connect(callback)
@@ -76,7 +77,50 @@ local function scanWorkspaceForNPCs()
     scanNPCs(workspace)
 end
 
--- 2. ESP HIGHLIGHT SYSTEM WITH CULLING (Prevents Roblox 31-Highlight Cap Limit)
+-- 2. Line of Sight Wall Check (Bypasses non-collidable transparent parts)
+local function isVisible(targetPart)
+    if not wallCheckEnabled then return true end
+    if not targetPart or not targetPart.Parent then return false end
+    
+    local origin = Camera.CFrame.Position
+    local destination = targetPart.Position
+    local direction = destination - origin
+    
+    local params = RaycastParams.new()
+    local ignoreList = {player.Character, targetPart.Parent}
+    params.FilterDescendantsInstances = ignoreList
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+    
+    local currentOrigin = origin
+    local currentDirection = direction
+    
+    for i = 1, 5 do -- Limit loops to prevent crashing
+        local result = workspace:Raycast(currentOrigin, currentDirection, params)
+        if not result then
+            return true -- Clear line of sight
+        end
+        
+        if result.Instance.CanCollide then
+            return false -- Solid obstruction hit
+        end
+        
+        -- Bypass non-collidable part (foliage, trigger zones, highlights)
+        table.insert(ignoreList, result.Instance)
+        params.FilterDescendantsInstances = ignoreList
+        
+        currentOrigin = result.Position + (direction.Unit * 0.05)
+        currentDirection = destination - currentOrigin
+        
+        if (currentOrigin - origin).Magnitude >= direction.Magnitude then
+            return true
+        end
+    end
+    
+    return false
+end
+
+-- 3. ESP Highlight Routine
 local MAX_ACTIVE_HIGHLIGHTS = 25
 
 local function updateAllESP()
@@ -84,7 +128,6 @@ local function updateAllESP()
     local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
     local myPos = myRoot and myRoot.Position or Vector3.new(0, 0, 0)
     
-    -- Gather Players
     if espEnabled and (targetMode == "Players" or targetMode == "Both") then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
@@ -95,7 +138,6 @@ local function updateAllESP()
         end
     end
     
-    -- Gather NPCs
     if espEnabled and (targetMode == "NPCs" or targetMode == "Both") then
         for _, npc in ipairs(npcCache) do
             if npc:FindFirstChild("HumanoidRootPart") then
@@ -105,17 +147,14 @@ local function updateAllESP()
         end
     end
     
-    -- Sort by distance (closest first)
     table.sort(list, function(a, b) return a.dist < b.dist end)
     
-    -- Populate Active Highlight Map (Limit to MAX_ACTIVE_HIGHLIGHTS)
     local activeHighlightMap = {}
     for i = 1, math.min(#list, MAX_ACTIVE_HIGHLIGHTS) do
         local target = list[i]
         activeHighlightMap[target.char] = target
     end
     
-    -- Destroy highlights that are out-of-range or disabled
     for char, h in pairs(activeHighlights) do
         if not char or not char.Parent or not activeHighlightMap[char] then
             if h and h.Parent then h:Destroy() end
@@ -123,7 +162,6 @@ local function updateAllESP()
         end
     end
     
-    -- Draw/Update close highlights
     for char, target in pairs(activeHighlightMap) do
         local h = activeHighlights[char] or char:FindFirstChild("EliteHighlight")
         if not h then
@@ -136,7 +174,6 @@ local function updateAllESP()
             activeHighlights[char] = h
         end
         
-        -- Color code targets accurately
         local correctColor = target.isPlayer and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(170, 50, 255)
         if h.OutlineColor ~= correctColor then
             h.OutlineColor = correctColor
@@ -146,7 +183,7 @@ local function updateAllESP()
     end
 end
 
--- 3. Core GUI Mounting
+-- 4. GUI Mounting Setup
 local targetParent = nil
 local success, err = pcall(function()
     targetParent = gethui and gethui() or CoreGui
@@ -162,7 +199,7 @@ screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
 screenGui.Parent = targetParent
 
--- FOV Reticle
+-- FOV Ring
 local circleFrame = Instance.new("Frame")
 circleFrame.AnchorPoint = Vector2.new(0.5, 0.5)
 circleFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -173,27 +210,28 @@ local uiStroke = Instance.new("UIStroke", circleFrame)
 uiStroke.Color = Color3.fromHex("CCCCCC")
 Instance.new("UICorner", circleFrame).CornerRadius = UDim.new(1, 0)
 
--- 4. Premium GUI Panel Setup
+-- 5. GUI Panel (Modern Midnight Theme)
 local mainPanel = Instance.new("Frame")
-mainPanel.Size = UDim2.new(0, 200, 0, 370) 
-mainPanel.Position = UDim2.new(1, -220, 0.5, -185)
-mainPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainPanel.Size = UDim2.new(0, 220, 0, 385) -- Width slightly wider for cleaner layouts
+mainPanel.Position = UDim2.new(1, -240, 0.5, -190)
+mainPanel.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
 mainPanel.BorderSizePixel = 0
 mainPanel.Active = true
 mainPanel.Parent = screenGui
-Instance.new("UICorner", mainPanel).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", mainPanel).CornerRadius = UDim.new(0, 10)
 
 local panelStroke = Instance.new("UIStroke", mainPanel)
-panelStroke.Color = Color3.fromRGB(45, 45, 45)
+panelStroke.Color = Color3.fromRGB(35, 35, 45)
 panelStroke.Thickness = 1
 
 local topBar = Instance.new("Frame")
-topBar.Size = UDim2.new(1, 0, 0, 30)
-topBar.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
+topBar.Size = UDim2.new(1, 0, 0, 32)
+topBar.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
 topBar.BorderSizePixel = 0
 topBar.Parent = mainPanel
-Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 10)
 
+-- Merge top corners
 local topBarCover = Instance.new("Frame")
 topBarCover.Size = UDim2.new(1, 0, 0, 10)
 topBarCover.Position = UDim2.new(0, 0, 1, -10)
@@ -201,42 +239,60 @@ topBarCover.BackgroundColor3 = topBar.BackgroundColor3
 topBarCover.BorderSizePixel = 0
 topBarCover.Parent = topBar
 
+-- Cyan neon title accent line
+local titleAccent = Instance.new("Frame")
+titleAccent.Size = UDim2.new(1, 0, 0, 1.5)
+titleAccent.Position = UDim2.new(0, 0, 1, 0)
+titleAccent.BackgroundColor3 = Color3.fromRGB(0, 188, 212)
+titleAccent.BorderSizePixel = 0
+titleAccent.Parent = topBar
+
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, -60, 1, 0)
-title.Position = UDim2.new(0, 10, 0, 0)
+title.Position = UDim2.new(0, 12, 0, 0)
 title.Text = "ELITE SYSTEM"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.TextColor3 = Color3.fromRGB(245, 245, 250)
 title.BackgroundTransparency = 1
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Font = Enum.Font.GothamBold
-title.TextSize = 13
+title.TextSize = 12
 title.Parent = topBar
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -30, 0, 0)
+closeBtn.Size = UDim2.new(0, 32, 0, 32)
+closeBtn.Position = UDim2.new(1, -32, 0, 0)
 closeBtn.Text = "✕"
-closeBtn.TextSize = 12
+closeBtn.TextSize = 11
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.TextColor3 = Color3.fromRGB(255, 90, 90)
 closeBtn.BackgroundTransparency = 1
 closeBtn.Parent = topBar
 
 local minBtn = Instance.new("TextButton")
-minBtn.Size = UDim2.new(0, 30, 0, 30)
-minBtn.Position = UDim2.new(1, -60, 0, 0)
+minBtn.Size = UDim2.new(0, 32, 0, 32)
+minBtn.Position = UDim2.new(1, -64, 0, 0)
 minBtn.Text = "−"
-minBtn.TextSize = 14
+minBtn.TextSize = 13
 minBtn.Font = Enum.Font.GothamBold
 minBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
 minBtn.BackgroundTransparency = 1
 minBtn.Parent = topBar
 
 local content = Instance.new("Frame")
-content.Size = UDim2.new(1, 0, 1, -30)
-content.Position = UDim2.new(0, 0, 0, 30)
+content.Size = UDim2.new(1, 0, 1, -32)
+content.Position = UDim2.new(0, 0, 0, 32)
 content.BackgroundTransparency = 1
 content.Parent = mainPanel
+
+local listLayout = Instance.new("UIListLayout", content)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, 6)
+
+local listPadding = Instance.new("UIPadding", content)
+listPadding.PaddingTop = UDim.new(0, 10)
+listPadding.PaddingBottom = UDim.new(0, 10)
+listPadding.PaddingLeft = UDim.new(0, 10)
+listPadding.PaddingRight = UDim.new(0, 10)
 
 -- Drag Integration
 local function makeDraggable(frame, dragHandle)
@@ -272,7 +328,7 @@ local function makeDraggable(frame, dragHandle)
 end
 makeDraggable(mainPanel, topBar)
 
--- Hover Utility
+-- Hover Utility using smooth Tweening
 local function addHoverEffect(button)
     local hover = Instance.new("Frame")
     hover.Size = UDim2.new(1, 0, 1, 0)
@@ -288,51 +344,146 @@ local function addHoverEffect(button)
         hoverCorner.CornerRadius = corner.CornerRadius
     end
 
-    safeConnect(button.MouseEnter, function() hover.BackgroundTransparency = 0.95 end)
-    safeConnect(button.MouseLeave, function() hover.BackgroundTransparency = 1 end)
+    local tweenIn = TweenService:Create(hover, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.93})
+    local tweenOut = TweenService:Create(hover, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 1})
+
+    safeConnect(button.MouseEnter, function() tweenIn:Play() end)
+    safeConnect(button.MouseLeave, function() tweenOut:Play() end)
 end
 
-local function createInput(labelText, posY, defaultValue)
+-- Input Group Setup
+local inputGroup = Instance.new("Frame")
+inputGroup.Size = UDim2.new(1, 0, 0, 118)
+inputGroup.BackgroundTransparency = 1
+inputGroup.LayoutOrder = 1
+inputGroup.Parent = content
+
+local inputList = Instance.new("UIListLayout", inputGroup)
+inputList.Padding = UDim.new(0, 6)
+
+local function createInputRow(labelText, defaultValue)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 25)
+    row.BackgroundTransparency = 1
+    row.Parent = inputGroup
+    
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0, 80, 0, 25)
-    label.Position = UDim2.new(0, 10, 0, posY)
+    label.Size = UDim2.new(0.4, -5, 1, 0)
+    label.Position = UDim2.new(0, 0, 0, 0)
     label.Text = labelText
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.TextColor3 = Color3.fromRGB(180, 180, 190)
     label.Font = Enum.Font.Gotham
     label.TextSize = 11
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.BackgroundTransparency = 1
-    label.Parent = content
-    label.Name = labelText
+    label.Parent = row
     
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0, 95, 0, 25)
-    box.Position = UDim2.new(0, 95, 0, posY)
-    box.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    box.Size = UDim2.new(0.6, 5, 1, 0)
+    box.Position = UDim2.new(0.4, -5, 0, 0)
+    box.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
     box.Text = defaultValue
     box.TextColor3 = Color3.fromRGB(255, 255, 255)
-    box.Font = Enum.Font.Gotham
+    box.Font = Enum.Font.GothamMedium
     box.TextSize = 11
     box.ClearTextOnFocus = false
-    box.Parent = content
+    box.Parent = row
     Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
     
     local inputStroke = Instance.new("UIStroke", box)
-    inputStroke.Color = Color3.fromRGB(45, 45, 45)
+    inputStroke.Color = Color3.fromRGB(45, 45, 55)
     inputStroke.Thickness = 1
     
     return box, label
 end
 
-local radIn = createInput("Radius:", 15, "100")
-local colIn = createInput("Hex:", 50, "CCCCCC")
-local smthIn = createInput("Smooth:", 85, "0")
-local partIn = createInput("Aim Part:", 120, "Head")
+local radIn = createInputRow("Radius:", "100")
+local colIn = createInputRow("Hex Color:", "CCCCCC")
+local smthIn = createInputRow("Smoothness:", "0")
+local partIn = createInputRow("Aim Part:", "Head")
 
-local function createButton(text, posY, color)
+-- Section Separator
+local separator = Instance.new("Frame")
+separator.Size = UDim2.new(1, 0, 0, 1)
+separator.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+separator.BorderSizePixel = 0
+separator.LayoutOrder = 2
+separator.Parent = content
+
+local function createButton(text, layoutOrder, color)
     local btn = Instance.new("TextButton", content)
-    btn.Size = UDim2.new(0, 180, 0, 30)
-    btn.Position = UDim2.new(0, 10, 0, posY)
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.BackgroundColor3 = color
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamSemibold
+    btn.TextSize = 11
+    btn.LayoutOrder = layoutOrder
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    addHoverEffect(btn)
+    return btn
+end
+
+local masterBtn = createButton("SYSTEM: ACTIVE", 3, Color3.fromRGB(0, 188, 212))
+local modeToggleBtn = createButton("TARGET: PLAYERS", 4, Color3.fromRGB(28, 28, 35))
+local bindBtn = createButton("BIND: " .. toggleKey.Name, 5, Color3.fromRGB(28, 28, 35))
+bindBtn.Size = UDim2.new(1, 0, 0, 25)
+
+local espToggleBtn = createButton("ESP: OFF", 6, Color3.fromRGB(28, 28, 35))
+local wallCheckBtn = createButton("WALL CHECK: OFF", 7, Color3.fromRGB(28, 28, 35))
+local tpToggleBtn = createButton("TP MODE: OFF", 8, Color3.fromRGB(28, 28, 35))
+
+-- TP Sub-menu layout
+local tpPanel = Instance.new("Frame")
+tpPanel.Size = UDim2.new(1, 0, 0, 97)
+tpPanel.BackgroundTransparency = 1
+tpPanel.LayoutOrder = 9
+tpPanel.Visible = false
+tpPanel.Parent = content
+
+local tpList = Instance.new("UIListLayout", tpPanel)
+tpList.Padding = UDim.new(0, 6)
+
+local function createTpInputRow(labelText, defaultValue)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 25)
+    row.BackgroundTransparency = 1
+    row.Parent = tpPanel
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.4, -5, 1, 0)
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(180, 180, 190)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 11
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.BackgroundTransparency = 1
+    label.Parent = row
+    
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0.6, 5, 1, 0)
+    box.Position = UDim2.new(0.4, -5, 0, 0)
+    box.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
+    box.Text = defaultValue
+    box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    box.Font = Enum.Font.GothamMedium
+    box.TextSize = 11
+    box.ClearTextOnFocus = false
+    box.Parent = row
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+    
+    local stroke = Instance.new("UIStroke", box)
+    stroke.Color = Color3.fromRGB(45, 45, 55)
+    stroke.Thickness = 1
+    
+    return box, label
+end
+
+local tpRangeIn, tpRangeLabel = createTpInputRow("TP Range:", "3")
+
+local function createTpButton(text, color)
+    local btn = Instance.new("TextButton", tpPanel)
+    btn.Size = UDim2.new(1, 0, 0, 30)
     btn.BackgroundColor3 = color
     btn.Text = text
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -343,23 +494,10 @@ local function createButton(text, posY, color)
     return btn
 end
 
-local modeToggleBtn = createButton("TARGET: PLAYERS", 155, Color3.fromRGB(60, 60, 60))
-local masterBtn = createButton("SYSTEM: ACTIVE", 195, Color3.fromRGB(30, 130, 30))
-local bindBtn = createButton("BIND: " .. toggleKey.Name, 235, Color3.fromRGB(45, 45, 45))
-bindBtn.Size = UDim2.new(0, 180, 0, 25)
+local gravToggleBtn = createTpButton("GRAVITY: 0 (ON)", Color3.fromRGB(0, 188, 212))
+local methodToggleBtn = createTpButton("METHOD: TELEPORT", Color3.fromRGB(130, 80, 250))
 
-local espToggleBtn = createButton("ESP: OFF", 270, Color3.fromRGB(45, 45, 45))
-local tpToggleBtn = createButton("TP MODE: OFF", 310, Color3.fromRGB(45, 45, 45))
-
-local gravToggleBtn = createButton("GRAVITY: 0 (ON)", 380, Color3.fromRGB(30, 130, 30))
-gravToggleBtn.Visible = false
-local methodToggleBtn = createButton("METHOD: TELEPORT", 415, Color3.fromRGB(60, 60, 120))
-methodToggleBtn.Visible = false
-
-local tpRangeIn, tpRangeLabel = createInput("TP Range:", 15, "3")
-tpRangeIn.Visible = false; tpRangeLabel.Visible = false
-
--- 5. Targeting Calculations
+-- 6. Targeting Calculations
 local function findSingleTarget()
     if not masterLocked then return nil end
     local target, dist = nil, math.huge
@@ -393,8 +531,10 @@ local function findSingleTarget()
             if onScreen then
                 local mag = (Vector2.new(pos.X, pos.Y) - center).Magnitude
                 if mag <= fovRadius and mag < dist then
-                    target = part
-                    dist = mag
+                    if isVisible(part) then -- Wallcheck evaluation
+                        target = part
+                        dist = mag
+                    end
                 end
             end
         end
@@ -402,7 +542,7 @@ local function findSingleTarget()
     return target
 end
 
--- 6. Render Loop (Frame-Rate Independent)
+-- 7. Render Loop (Frame-Rate Independent)
 local renderLoopConnection
 renderLoopConnection = RunService.RenderStepped:Connect(function(dt)
     if masterLocked and aimActive then
@@ -416,6 +556,12 @@ renderLoopConnection = RunService.RenderStepped:Connect(function(dt)
             local hum = targetChar:FindFirstChildOfClass("Humanoid")
             
             if hum and hum.Health > 0 and root then
+                -- Final safety wall-check during tracking
+                if not isVisible(lockedTargetPart) then
+                    lockedTargetPart = nil
+                    return
+                end
+                
                 local targetCF = CFrame.new(Camera.CFrame.Position, lockedTargetPart.Position)
                 if smoothness <= 0 then
                     Camera.CFrame = targetCF 
@@ -455,20 +601,28 @@ renderLoopConnection = RunService.RenderStepped:Connect(function(dt)
 end)
 table.insert(scriptConnections, renderLoopConnection)
 
--- 7. Interaction Event Listeners
+-- 8. Button Interaction Event Handlers
+masterBtn.MouseButton1Click:Connect(function()
+    masterLocked = not masterLocked
+    masterBtn.Text = masterLocked and "SYSTEM: ACTIVE" or "SYSTEM: DISABLED"
+    masterBtn.BackgroundColor3 = masterLocked and Color3.fromRGB(0, 188, 212) or Color3.fromRGB(150, 50, 50)
+    circleFrame.Visible = masterLocked
+    lockedTargetPart = nil
+end)
+
 modeToggleBtn.MouseButton1Click:Connect(function()
     if targetMode == "Players" then
         targetMode = "NPCs"
         modeToggleBtn.Text = "TARGET: NPCs"
-        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(100, 40, 150)
+        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(130, 80, 250)
     elseif targetMode == "NPCs" then
         targetMode = "Both"
         modeToggleBtn.Text = "TARGET: BOTH"
-        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 188, 212)
     else
         targetMode = "Players"
         modeToggleBtn.Text = "TARGET: PLAYERS"
-        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        modeToggleBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
     end
     lockedTargetPart = nil
     updateAllESP()
@@ -477,57 +631,67 @@ end)
 espToggleBtn.MouseButton1Click:Connect(function()
     espEnabled = not espEnabled
     espToggleBtn.Text = espEnabled and "ESP: ON" or "ESP: OFF"
-    espToggleBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(30, 130, 30) or Color3.fromRGB(45, 45, 45)
+    espToggleBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(0, 188, 212) or Color3.fromRGB(28, 28, 35)
     updateAllESP()
+end)
+
+wallCheckBtn.MouseButton1Click:Connect(function()
+    wallCheckEnabled = not wallCheckEnabled
+    wallCheckBtn.Text = wallCheckEnabled and "WALL CHECK: ON" or "WALL CHECK: OFF"
+    wallCheckBtn.BackgroundColor3 = wallCheckEnabled and Color3.fromRGB(0, 188, 212) or Color3.fromRGB(28, 28, 35)
+    lockedTargetPart = nil
 end)
 
 methodToggleBtn.MouseButton1Click:Connect(function()
     tpMethod = (tpMethod == "Teleport") and "Moveset" or "Teleport"
     methodToggleBtn.Text = "METHOD: " .. tpMethod:upper()
+    methodToggleBtn.BackgroundColor3 = (tpMethod == "Teleport") and Color3.fromRGB(130, 80, 250) or Color3.fromRGB(0, 188, 212)
 end)
 
 gravToggleBtn.MouseButton1Click:Connect(function()
     useZeroGravity = not useZeroGravity
     gravToggleBtn.Text = useZeroGravity and "GRAVITY: 0 (ON)" or "GRAVITY: NORMAL"
-    gravToggleBtn.BackgroundColor3 = useZeroGravity and Color3.fromRGB(30, 130, 30) or Color3.fromRGB(130, 30, 30)
+    gravToggleBtn.BackgroundColor3 = useZeroGravity and Color3.fromRGB(0, 188, 212) or Color3.fromRGB(150, 50, 50)
     if not useZeroGravity then workspace.Gravity = originalGravity end
 end)
 
 tpToggleBtn.MouseButton1Click:Connect(function()
     tpEnabled = not tpEnabled
-    if tpEnabled then
-        tpToggleBtn.Text = "TP MODE: ON"
-        tpToggleBtn.BackgroundColor3 = Color3.fromRGB(30, 130, 30)
-        tpRangeIn.Visible = true
-        tpRangeLabel.Visible = true
-        gravToggleBtn.Visible = true
-        methodToggleBtn.Visible = true
-        mainPanel.Size = UDim2.new(0, 200, 0, 480)
-        modeToggleBtn.Position = UDim2.new(0, 10, 0, 190)
-        masterBtn.Position = UDim2.new(0, 10, 0, 230)
-        bindBtn.Position = UDim2.new(0, 10, 0, 270)
-        espToggleBtn.Position = UDim2.new(0, 10, 0, 305)
-        tpToggleBtn.Position = UDim2.new(0, 10, 0, 345)
-        gravToggleBtn.Position = UDim2.new(0, 10, 0, 380)
-        methodToggleBtn.Position = UDim2.new(0, 10, 0, 415)
-    else
-        workspace.Gravity = originalGravity
-        tpToggleBtn.Text = "TP MODE: OFF"
-        tpToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        tpRangeIn.Visible = false
-        tpRangeLabel.Visible = false
-        gravToggleBtn.Visible = false
-        methodToggleBtn.Visible = false
-        mainPanel.Size = UDim2.new(0, 200, 0, 370)
-        modeToggleBtn.Position = UDim2.new(0, 10, 0, 155)
-        masterBtn.Position = UDim2.new(0, 10, 0, 195)
-        bindBtn.Position = UDim2.new(0, 10, 0, 235)
-        espToggleBtn.Position = UDim2.new(0, 10, 0, 270)
-        tpToggleBtn.Position = UDim2.new(0, 10, 0, 310)
-    end
+    tpToggleBtn.Text = tpEnabled and "TP MODE: ON" or "TP MODE: OFF"
+    tpToggleBtn.BackgroundColor3 = tpEnabled and Color3.fromRGB(0, 188, 212) or Color3.fromRGB(28, 28, 35)
+    
+    tpPanel.Visible = tpEnabled
+    
+    -- Smoothly Tween UI Height
+    local targetHeight = tpEnabled and 490 or 385
+    TweenService:Create(mainPanel, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 220, 0, targetHeight)
+    }):Play()
 end)
 
--- 8. Input Event Subscriptions (Isolated while key binding and textbox typing)
+-- 9. Key Binding Setup
+bindBtn.MouseButton1Click:Connect(function()
+    if isBindingKey then return end
+    isBindingKey = true
+    bindBtn.Text = "PRESS KEY..."
+    bindBtn.BackgroundColor3 = Color3.fromRGB(130, 80, 250)
+    
+    local keyConn
+    keyConn = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            if input.KeyCode ~= Enum.KeyCode.Escape then
+                toggleKey = input.KeyCode
+            end
+            bindBtn.Text = "BIND: " .. toggleKey.Name
+            bindBtn.BackgroundColor3 = Color3.fromRGB(28, 28, 35)
+            keyConn:Disconnect()
+            isBindingKey = false
+        end
+    end)
+    table.insert(scriptConnections, keyConn)
+end)
+
+-- 10. Global Shortcuts & Inputs
 safeConnect(UserInputService.InputBegan, function(input, gpe)
     if gpe or isBindingKey then return end
     
@@ -537,7 +701,7 @@ safeConnect(UserInputService.InputBegan, function(input, gpe)
     elseif input.KeyCode == toggleKey then 
         masterLocked = not masterLocked
         masterBtn.Text = masterLocked and "SYSTEM: ACTIVE" or "SYSTEM: DISABLED"
-        masterBtn.BackgroundColor3 = masterLocked and Color3.fromRGB(30, 130, 30) or Color3.fromRGB(130, 30, 30)
+        masterBtn.BackgroundColor3 = masterLocked and Color3.fromRGB(0, 188, 212) or Color3.fromRGB(150, 50, 50)
         circleFrame.Visible = masterLocked
     end
 end)
@@ -552,16 +716,21 @@ end)
 minBtn.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     content.Visible = not isMinimized
-    if isMinimized then 
-        mainPanel.Size = UDim2.new(0, 200, 0, 30)
+    
+    local panelTargetHeight = 32
+    if not isMinimized then
+        panelTargetHeight = tpEnabled and 490 or 385
+        minBtn.Text = "−"
+    else
         minBtn.Text = "+"
-    else 
-        mainPanel.Size = tpEnabled and UDim2.new(0, 200, 0, 480) or UDim2.new(0, 200, 0, 370)
-        minBtn.Text = "−" 
     end
+    
+    TweenService:Create(mainPanel, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 220, 0, panelTargetHeight)
+    }):Play()
 end)
 
--- 9. Clean Exit Routine
+-- 11. Clean Exit & De-registration
 local function removeAllHighlights()
     for char, h in pairs(activeHighlights) do
         if h and h.Parent then h:Destroy() end
@@ -583,12 +752,7 @@ closeBtn.MouseButton1Click:Connect(function()
     screenGui:Destroy() 
 end)
 
--- Input Focus Configuration handlers
-tpRangeIn.FocusLost:Connect(function() 
-    tpDistance = sanitize(tpRangeIn.Text, 3)
-    tpRangeIn.Text = tostring(tpDistance) 
-end)
-
+-- Config input mapping
 radIn.FocusLost:Connect(function() 
     fovRadius = sanitize(radIn.Text, 100)
     radIn.Text = tostring(fovRadius)
@@ -616,31 +780,15 @@ partIn.FocusLost:Connect(function()
     lockedTargetPart = nil 
 end)
 
--- Key Binding Setup
-bindBtn.MouseButton1Click:Connect(function()
-    if isBindingKey then return end
-    isBindingKey = true
-    bindBtn.Text = "PRESS KEY..."
-    
-    local keyConn
-    keyConn = UserInputService.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Keyboard then
-            if input.KeyCode ~= Enum.KeyCode.Escape then
-                toggleKey = input.KeyCode
-            end
-            bindBtn.Text = "BIND: " .. toggleKey.Name
-            keyConn:Disconnect()
-            isBindingKey = false
-        end
-    end)
-    table.insert(scriptConnections, keyConn)
+tpRangeIn.FocusLost:Connect(function() 
+    tpDistance = sanitize(tpRangeIn.Text, 3)
+    tpRangeIn.Text = tostring(tpDistance) 
 end)
 
--- 10. Startup Initialization & Main Updates
+-- 12. Startup Caches & Loop Init
 scanWorkspaceForNPCs()
 updateAllESP()
 
--- Lightweight dynamic background thread (Updates every 1.5 seconds)
 task.spawn(function()
     while scriptActive do
         task.wait(1.5)
